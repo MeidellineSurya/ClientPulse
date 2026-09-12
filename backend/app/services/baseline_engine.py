@@ -21,6 +21,11 @@ TRACKED_SIGNALS = [
 # the exact weeks scoring is trying to evaluate.
 TREND_WINDOW = 3
 
+# A baseline computed from fewer than this many points can't establish any
+# real variance (1 point always has stddev=None) — see
+# split_baseline_and_trend_windows.
+MIN_BASELINE_SIZE = 2
+
 
 def mean_stddev(values: list[float]) -> tuple[float, float | None]:
     """Sample mean/stddev. stddev is None with fewer than 2 values — not
@@ -39,12 +44,16 @@ def split_baseline_and_trend_windows(history: list[dict]) -> tuple[list[dict], l
     """Splits period-ordered (oldest first) signal_snapshot history into
     (baseline_window, trend_window).
 
-    Falls back to using all of `history` for both windows when there isn't
-    more than TREND_WINDOW periods yet (a new account) — drift detection is
-    naturally weaker until more history accumulates, but this avoids an
-    empty baseline for the accounts that need it most.
+    Falls back to using all of `history` for both windows whenever the
+    baseline_window would otherwise end up with fewer than MIN_BASELINE_SIZE
+    points (a new account, or one with exactly TREND_WINDOW+1 periods) —
+    drift detection is naturally weaker until more history accumulates, but
+    this avoids scoring off a baseline too thin to have any established
+    variance (a single-point baseline always has stddev=None, which
+    compute_drift treats as "any deviation is maximal" — noisy and prone to
+    false alerts rather than a real trend).
     """
-    if len(history) <= TREND_WINDOW:
+    if len(history) - TREND_WINDOW < MIN_BASELINE_SIZE:
         return history, history
     return history[:-TREND_WINDOW], history[-TREND_WINDOW:]
 

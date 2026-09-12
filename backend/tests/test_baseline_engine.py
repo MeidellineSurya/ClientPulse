@@ -39,6 +39,26 @@ def test_split_windows_falls_back_to_all_history_when_too_short():
     assert trend_window == history
 
 
+def test_split_windows_falls_back_when_baseline_would_be_a_single_point():
+    # Exactly TREND_WINDOW+1 (4) periods would otherwise leave a 1-point
+    # baseline_window, which can never establish real variance (mean_stddev
+    # always returns stddev=None for n<2) — falls back to using all 4 for
+    # both windows instead, same as the too-short case above.
+    history = [{"period_start": f"2026-01-{i:02d}"} for i in range(1, 5)]
+    baseline_window, trend_window = split_baseline_and_trend_windows(history)
+    assert baseline_window == history
+    assert trend_window == history
+
+
+def test_split_windows_uses_a_real_split_once_baseline_has_at_least_two_points():
+    # 5 periods: baseline_window gets 2 points (enough for a real stddev),
+    # trend_window gets the last 3.
+    history = [{"period_start": f"2026-01-{i:02d}"} for i in range(1, 6)]
+    baseline_window, trend_window = split_baseline_and_trend_windows(history)
+    assert baseline_window == history[:2]
+    assert trend_window == history[-3:]
+
+
 def test_compute_baselines_per_signal():
     window = [
         {"avg_response_time_hours": 2.0, "meetings_cancelled": 0, "invoice_days_late": 0, "meetings_scheduled": 5},
