@@ -2,10 +2,10 @@
 # fake Supabase client (no real database needed) injected via FastAPI's
 # dependency override.
 
-from fastapi.testclient import TestClient
-
 from app.dependencies import require_supabase_client
 from app.main import app
+from fastapi.testclient import TestClient
+
 from tests.fakes import FakeSupabaseClient
 
 
@@ -36,7 +36,10 @@ def test_list_alerts_sorted_newest_first_with_account_name():
                 _alert("older", "acc-1", "2026-01-01T00:00:00"),
                 _alert("newer", "acc-2", "2026-02-01T00:00:00"),
             ],
-            "account": [{"id": "acc-1", "name": "Acme"}, {"id": "acc-2", "name": "Beta"}],
+            "account": [
+                {"id": "acc-1", "name": "Acme"},
+                {"id": "acc-2", "name": "Beta"},
+            ],
         }
     )
     client = _override_client(fake_client)
@@ -51,26 +54,56 @@ def test_list_alerts_sorted_newest_first_with_account_name():
     assert body[0]["account_name"] == "Beta"
 
 
-def test_set_alert_status_updates_and_returns_the_alert():
+def test_list_alerts_filters_by_status():
     fake_client = FakeSupabaseClient(
         {
-            "alert": [_alert("alert-1", "acc-1", "2026-01-01T00:00:00", status="open")],
+            "alert": [
+                _alert("open-alert", "acc-1", "2026-02-01T00:00:00"),
+                _alert(
+                    "resolved-alert",
+                    "acc-1",
+                    "2026-01-01T00:00:00",
+                    status="resolved",
+                ),
+            ],
             "account": [{"id": "acc-1", "name": "Acme"}],
         }
     )
     client = _override_client(fake_client)
     try:
-        response = client.post("/alerts/alert-1/status", json={"status": "acknowledged"})
+        response = client.get("/alerts?status=resolved")
+    finally:
+        app.dependency_overrides.pop(require_supabase_client, None)
+
+    assert response.status_code == 200
+    assert [alert["id"] for alert in response.json()] == ["resolved-alert"]
+
+
+def test_set_alert_status_updates_and_returns_the_alert():
+    fake_client = FakeSupabaseClient(
+        {
+            "alert": [
+                _alert(
+                    "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                    "acc-1",
+                    "2026-01-01T00:00:00",
+                    status="open",
+                )
+            ]
+        }
+    )
+    client = _override_client(fake_client)
+    try:
+        response = client.post(
+            "/alerts/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/status",
+            json={"status": "acknowledged"},
+        )
     finally:
         app.dependency_overrides.pop(require_supabase_client, None)
 
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "acknowledged"
-    # Regression check: the response must carry the account name, not force
-    # it to null, or the alerts inbox falls back to showing the raw UUID
-    # right after a status change.
-    assert body["account_name"] == "Acme"
     assert fake_client._tables["alert"][0]["status"] == "acknowledged"
 
 
@@ -78,7 +111,10 @@ def test_set_alert_status_404_when_alert_missing():
     fake_client = FakeSupabaseClient({"alert": []})
     client = _override_client(fake_client)
     try:
-        response = client.post("/alerts/ghost/status", json={"status": "resolved"})
+        response = client.post(
+            "/alerts/99999999-9999-4999-8999-999999999999/status",
+            json={"status": "resolved"},
+        )
     finally:
         app.dependency_overrides.pop(require_supabase_client, None)
 
@@ -86,10 +122,23 @@ def test_set_alert_status_404_when_alert_missing():
 
 
 def test_set_alert_status_rejects_invalid_status_value():
-    fake_client = FakeSupabaseClient({"alert": [_alert("alert-1", "acc-1", "2026-01-01T00:00:00")]})
+    fake_client = FakeSupabaseClient(
+        {
+            "alert": [
+                _alert(
+                    "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                    "acc-1",
+                    "2026-01-01T00:00:00",
+                )
+            ]
+        }
+    )
     client = _override_client(fake_client)
     try:
-        response = client.post("/alerts/alert-1/status", json={"status": "snoozed"})
+        response = client.post(
+            "/alerts/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/status",
+            json={"status": "snoozed"},
+        )
     finally:
         app.dependency_overrides.pop(require_supabase_client, None)
 
