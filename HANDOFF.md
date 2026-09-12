@@ -59,7 +59,17 @@ doc.
 - [ ] Account detail page (hardcoded data + charts)
 - [ ] Alerts inbox page
 - [ ] Settings/connections page
-- [ ] **Scoring engine wired to real Supabase data (the core feature — see §5)**
+- [x] **Scoring engine implemented (the core feature — see §5)** — `baseline_engine.py`
+      (rolling avg/stddev per signal) + `scoring_engine.py` (drift, weighted composite
+      risk, worsening-trend-gated alert decision, exactly the §5 formula) +
+      `scoring_repo.py` + `POST /score/recompute[/{account_id}]`, on branch
+      `feat/baseline-scoring-engine`. 51/51 tests passing; validated against the real
+      seed data — flags exactly the 3 seeded worsening accounts (scores 97.6–100),
+      clean gap to every stable account (next-highest 38.4). **Not yet run against a
+      live Supabase project** (same caveat as ingestion — no live project yet).
+      `RISK_ALERT_THRESHOLD=60`, severity buckets (70/85/95), and `Z_CAP=3.0` are
+      placeholders empirically tuned against seed data, not values specified in this
+      doc — revisit once real accounts flow through ingestion.
 - [ ] LLM brief generation wired with real prompt (not stub)
 - [ ] Frontend connected to backend (no more hardcoded arrays)
 - [ ] Live Gmail/Calendar pull (stretch goal, cut first if behind)
