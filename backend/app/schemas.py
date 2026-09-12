@@ -17,9 +17,17 @@ class InvoiceRowError(BaseModel):
     error: str
 
 
+class UnmatchedInvoiceRow(BaseModel):
+    row_number: int
+    account_email: str
+    reason: str
+
+
 class CsvIngestResult(BaseModel):
     rows_received: int
     rows_parsed: int
     rows_failed: int
     errors: list[InvoiceRowError]
     parsed: list[ParsedInvoiceRow]
+    snapshots_updated: int = 0
+    unmatched: list[UnmatchedInvoiceRow] = []
