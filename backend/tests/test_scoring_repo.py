@@ -3,9 +3,11 @@
 
 from app.services.scoring_repo import (
     fetch_all_account_ids,
+    fetch_open_alert,
     fetch_signal_history,
     insert_alert,
     insert_health_score,
+    upsert_alert,
     upsert_baselines,
 )
 from tests.fakes import FakeSupabaseClient
@@ -62,9 +64,111 @@ def test_insert_health_score_appends_a_row():
     assert client._tables["health_score"] == [{"account_id": "a1", "composite_score": 72.5, "trend_slope": 3.2}]
 
 
-def test_insert_alert_defaults_to_open_status():
+def test_insert_alert_defaults_to_open_status_with_a_triggered_at_timestamp():
     client = FakeSupabaseClient({"alert": []})
     insert_alert(client, "a1", ["avg_response_time_hours"], "high")
-    assert client._tables["alert"] == [
-        {"account_id": "a1", "signals_fired": ["avg_response_time_hours"], "severity": "high", "status": "open"}
-    ]
+    rows = client._tables["alert"]
+    assert len(rows) == 1
+    assert rows[0]["account_id"] == "a1"
+    assert rows[0]["signals_fired"] == ["avg_response_time_hours"]
+    assert rows[0]["severity"] == "high"
+    assert rows[0]["status"] == "open"
+    assert rows[0]["triggered_at"]  # non-empty, set at insert time
+
+
+def test_fetch_open_alert_ignores_resolved_alerts():
+    client = FakeSupabaseClient(
+        {
+            "alert": [
+                {"id": "old", "account_id": "a1", "severity": "high", "status": "resolved", "triggered_at": "2026-01-01"},
+            ]
+        }
+    )
+    assert fetch_open_alert(client, "a1") is None
+
+
+def test_fetch_open_alert_returns_most_recently_triggered():
+    client = FakeSupabaseClient(
+        {
+            "alert": [
+                {"id": "older", "account_id": "a1", "severity": "low", "status": "open", "triggered_at": "2026-01-01T00:00:00"},
+                {"id": "newer", "account_id": "a1", "severity": "medium", "status": "acknowledged", "triggered_at": "2026-02-01T00:00:00"},
+            ]
+        }
+    )
+    existing = fetch_open_alert(client, "a1")
+    assert existing["id"] == "newer"
+
+
+def test_upsert_alert_inserts_when_no_open_alert_exists():
+    client = FakeSupabaseClient({"alert": []})
+    upsert_alert(client, "a1", ["invoice_days_late"], "medium")
+    assert len(client._tables["alert"]) == 1
+    assert client._tables["alert"][0]["severity"] == "medium"
+
+
+def test_upsert_alert_does_not_duplicate_when_severity_is_unchanged():
+    # Simulates calling /score/recompute twice in a row against the same
+    # still-worsening (but not further worsening) account — the inbox
+    # should not gain a second row for the same issue.
+    client = FakeSupabaseClient(
+        {
+            "alert": [
+                {
+                    "id": "existing",
+                    "account_id": "a1",
+                    "severity": "medium",
+                    "signals_fired": ["invoice_days_late"],
+                    "status": "open",
+                    "triggered_at": "2026-01-01T00:00:00",
+                }
+            ]
+        }
+    )
+    upsert_alert(client, "a1", ["invoice_days_late"], "medium")
+    assert len(client._tables["alert"]) == 1
+    assert client._tables["alert"][0]["triggered_at"] == "2026-01-01T00:00:00"  # untouched
+
+
+def test_upsert_alert_escalates_existing_alert_in_place():
+    client = FakeSupabaseClient(
+        {
+            "alert": [
+                {
+                    "id": "existing",
+                    "account_id": "a1",
+                    "severity": "low",
+                    "signals_fired": ["invoice_days_late"],
+                    "status": "open",
+                    "triggered_at": "2026-01-01T00:00:00",
+                }
+            ]
+        }
+    )
+    upsert_alert(client, "a1", ["invoice_days_late", "meetings_cancelled"], "high")
+    rows = client._tables["alert"]
+    assert len(rows) == 1  # updated in place, not duplicated
+    assert rows[0]["severity"] == "high"
+    assert rows[0]["signals_fired"] == ["invoice_days_late", "meetings_cancelled"]
+    assert rows[0]["triggered_at"] == "2026-01-01T00:00:00"  # preserved: still the original trigger time
+
+
+def test_upsert_alert_does_not_downgrade_existing_alert():
+    client = FakeSupabaseClient(
+        {
+            "alert": [
+                {
+                    "id": "existing",
+                    "account_id": "a1",
+                    "severity": "high",
+                    "signals_fired": ["invoice_days_late"],
+                    "status": "open",
+                    "triggered_at": "2026-01-01T00:00:00",
+                }
+            ]
+        }
+    )
+    upsert_alert(client, "a1", ["invoice_days_late"], "medium")
+    rows = client._tables["alert"]
+    assert len(rows) == 1
+    assert rows[0]["severity"] == "high"  # not downgraded

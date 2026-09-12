@@ -80,6 +80,23 @@ def test_recompute_account_score_worsening_account_fires_alert_and_persists_it()
     assert fake_client._tables["alert"][0]["account_id"] == "acc-1"
 
 
+def test_recompute_account_score_twice_does_not_duplicate_alert():
+    # Calling /score/recompute more than once against the same unchanged,
+    # still-worsening history (e.g. a re-triggered cron before new data has
+    # arrived) must not add a second alert row for the same issue.
+    fake_client = FakeSupabaseClient({"signal_snapshot": _worsening_snapshots("acc-1")})
+    client = _override_client(fake_client)
+    try:
+        first = client.post("/score/recompute/acc-1")
+        second = client.post("/score/recompute/acc-1")
+    finally:
+        app.dependency_overrides.pop(scoring._require_supabase_client, None)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert len(fake_client._tables["alert"]) == 1
+
+
 def test_recompute_account_score_404_when_no_history():
     fake_client = FakeSupabaseClient({"signal_snapshot": []})
     client = _override_client(fake_client)

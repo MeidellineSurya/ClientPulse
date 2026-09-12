@@ -16,8 +16,8 @@ from app.services.scoring_engine import score_account_history
 from app.services.scoring_repo import (
     fetch_all_account_ids,
     fetch_signal_history,
-    insert_alert,
     insert_health_score,
+    upsert_alert,
     upsert_baselines,
 )
 
@@ -39,7 +39,7 @@ def _score_and_persist(client: Client, account_id: str, history: list[dict]) -> 
     upsert_baselines(client, account_id, result.baselines)
     insert_health_score(client, account_id, result.composite_score, result.trend_slope)
     if result.alert_fired:
-        insert_alert(client, account_id, result.signals_fired, result.severity)
+        upsert_alert(client, account_id, result.signals_fired, result.severity)
 
     return AccountScoreResult(
         account_id=account_id,

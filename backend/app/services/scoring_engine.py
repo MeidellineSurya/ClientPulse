@@ -122,6 +122,11 @@ def should_fire_alert(composite_score: float, trend_slope: float) -> bool:
     return composite_score >= RISK_ALERT_THRESHOLD and is_worsening_trend(trend_slope)
 
 
+# Ascending order, used to detect whether a new evaluation is an
+# *escalation* of an account's existing open alert (see scoring_repo.upsert_alert).
+SEVERITY_ORDER = ["low", "medium", "high", "critical"]
+
+
 def decide_severity(composite_score: float) -> str:
     if composite_score >= 95:
         return "critical"
