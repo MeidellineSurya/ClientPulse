@@ -39,9 +39,10 @@ history). Each app also has its own `.env.example` to copy from.
 
 - [x] Repo scaffolding
 - [x] Supabase schema
-- [ ] Supabase seed data
-- [ ] FastAPI skeleton
-- [ ] FastAPI endpoints
+- [x] Supabase seed data (generated, not yet applied to a live project)
+- [x] FastAPI skeleton
+- [ ] FastAPI endpoints (`/ingest/csv` done; `/accounts`, `/alerts` pending)
+- [ ] Gmail/Calendar pull (scaffolded, untested against a live Google account — no credentials yet)
 - [ ] Groq client stub
 - [ ] React (Vite) skeleton
 - [ ] Frontend pages
