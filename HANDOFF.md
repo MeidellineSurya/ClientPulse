@@ -39,60 +39,73 @@ doc.
 > rejoining mid-build to know where things actually stand.
 
 - [x] Repo scaffolding (folders, README, .env.example)
-- [x] Supabase schema.sql written (not yet applied to a live Supabase project)
-- [x] Supabase seed data (StudioCo + 15 mock accounts, 8-week history, 3 trending
-      worse — `backend/scripts/generate_seed.py` -> `supabase/seed.sql`; not yet
-      applied to a live Supabase project)
+- [x] Supabase schema.sql — **applied to a live Supabase project** (all 6 tables + indexes)
+- [x] Supabase seed data — **applied to the live project**: StudioCo + 15 accounts,
+      8-week history each (120 `signal_snapshot` rows), 3 trending worse. Verified
+      via direct query against the real database.
 - [x] FastAPI skeleton running (`/health` responds)
-- [x] FastAPI endpoints (`/accounts`, `/alerts`, `/ingest/csv`) — `/ingest/csv`
-      fully wired to Supabase (parses CSV, matches account/period, writes
-      `invoice_days_late`, tested). `GET /accounts`, `GET /accounts/{id}[/signals]`,
-      `GET /alerts`, `POST /alerts/{id}/status` on branch
-      `feat/accounts-alerts-endpoints` — real Supabase reads (no stub data), account
-      list joins each account's latest `health_score`, alerts join the account name,
-      status updates validated against open/acknowledged/resolved. 98/98 tests
-      passing; integration-checked by scoring the real seed data into a fake client
-      and reading it back through this layer. **Not yet run against a live Supabase
-      project.**
+- [x] FastAPI endpoints (`/accounts`, `/alerts`, `/ingest/csv`) — now on `main`.
+      `/ingest/csv` fully wired to Supabase. `GET /accounts`, `GET
+      /accounts/{id}[/signals][/health-history]`, `GET /alerts` (with `?status=`
+      filter), `POST/PATCH /alerts/{id}` — real Supabase reads, account list joins
+      latest `health_score`, alerts join account name, status transitions validated
+      with optimistic concurrency control (no reopening resolved alerts, no moving
+      backwards). 146/146 tests passing. **Run for real against the live Supabase
+      project** — verified end-to-end in an actual browser session.
 - [x] Gmail/Calendar OAuth ingestion — `/ingest/gmail-calendar/{account_id}` now
       uses the production metadata-only Gmail and read-only Calendar APIs, eagerly
       refreshes and scope-checks OAuth credentials, filters Gmail headers locally
       because `gmail.metadata` forbids server-side `q`, maps Google failures cleanly,
       validates periods/UUIDs, and tests the complete fetch → compute → Supabase
       snapshot-write path without reading message bodies. Live-account verification
-      still needs project-specific Google and Supabase credentials.
-- [x] Groq brief provider implemented (`openai/gpt-oss-120b`, validated JSON + deterministic fallback)
-- [x] Deterministic alert trigger implemented (threshold crossing + 3-period worsening trend + episode key)
-- [ ] Frontend (Vite + React) skeleton running
-- [ ] Portfolio page (hardcoded data)
-- [ ] Account detail page (hardcoded data + charts)
-- [ ] Alerts inbox page
-- [ ] Settings/connections page
+      still needs project-specific Google credentials (Supabase side is now live).
+- [x] Groq brief provider implemented (`openai/gpt-oss-120b`, validated JSON +
+      deterministic fallback) — see ⚠️ below, **not wired to any endpoint yet**.
+- [x] Deterministic alert trigger implemented — see ⚠️ below, **two unreconciled
+      implementations exist**.
+- [x] Frontend (Vite + React) skeleton running — on `feat/frontend-app`, merged with
+      the latest `main`. TypeScript + Tailwind v4 + shadcn/ui + React Router + Recharts.
+- [x] Portfolio page — real data, sortable table, color-coded health scores, trend
+      arrows, total-at-risk-revenue summary bar
+- [x] Account detail page — real Recharts trend charts per signal, composite-score
+      history chart (via the new `/health-history` endpoint), revenue at risk
+- [x] Alerts inbox page — real alerts, status-update button wired to the live endpoint
+- [x] Settings/connections page — UI only, matches spec ("not wired up yet")
 - [x] **Scoring engine implemented (the core feature — see §5)** — `baseline_engine.py`
       (rolling avg/stddev per signal) + `scoring_engine.py` (drift, weighted composite
       risk, worsening-trend-gated alert decision, exactly the §5 formula) +
-      `scoring_repo.py` + `POST /score/recompute[/{account_id}]`, on branch
-      `feat/baseline-scoring-engine`. 74/74 tests passing; validated against the real
-      seed data — flags exactly the 3 seeded worsening accounts (scores 97.6–100),
-      clean gap to every stable account (next-highest 38.4). **Not yet run against a
-      live Supabase project** (same caveat as ingestion — no live project yet).
-      `RISK_ALERT_THRESHOLD=60`, severity buckets (70/85/95), and `Z_CAP=3.0` are
-      placeholders empirically tuned against seed data, not values specified in this
-      doc — revisit once real accounts flow through ingestion.
-      Also on this branch: **`revenue_at_risk`** per account (annualized contract
-      value × composite_score, feeding §9's "at-risk revenue total" directly) and
-      **`total_revenue_at_risk`** on the batch endpoint (summed across *alerting*
-      accounts only); **`signal_contributions`** — a %-breakdown of which signals
-      drove each score, e.g. "68% response-time drift, 22% cancellations", for the
-      "how is this calculated" answer in §5; alert de-duplication so repeated
-      recompute calls escalate/refresh an account's existing open alert instead of
-      spamming duplicates; and a full pre-PR audit (batch-failure isolation so one
-      bad account can't 500 the whole `/score/recompute` call, a single-point
-      baseline edge case fixed, baseline writes batched into one request).
-- [x] LLM brief generation implemented with real evidence-bound prompt (route/database wiring pending)
-- [ ] Frontend connected to backend (no more hardcoded arrays)
-- [ ] Live Gmail/Calendar pull (stretch goal, cut first if behind)
+      `scoring_repo.py` + `POST /score/recompute[/{account_id}]`, now on `main`.
+      Validated against the real seed data — flags exactly the 3 seeded worsening
+      accounts (scores 97.6–100), clean gap to every stable account (next-highest
+      38.4). **Now run for real against the live Supabase project**, not just seed
+      data in isolation. `RISK_ALERT_THRESHOLD=60`, severity buckets (70/85/95), and
+      `Z_CAP=3.0` are placeholders empirically tuned against seed data, not values
+      specified in this doc.
+      Also included: **`revenue_at_risk`** per account (feeds the Portfolio page's
+      summary bar with a real number — $418,369.20 across the 3 live-flagged
+      accounts) and **`total_revenue_at_risk`** on the batch endpoint;
+      **`signal_contributions`** — a %-breakdown of which signals drove each score;
+      alert de-duplication so repeated recompute calls escalate/refresh an existing
+      open alert instead of spamming duplicates.
+- [x] LLM brief generation implemented with real evidence-bound prompt (`retention_radar/briefs.py`)
+      — **route/database wiring still pending**, see ⚠️ below
+- [x] Frontend connected to backend — real fetches throughout, no hardcoded arrays,
+      verified in an actual headless-browser session against the live project
+- [ ] Live Gmail/Calendar pull (stretch goal, cut first if behind — no Google
+      credentials available yet, Supabase side is otherwise ready)
 - [ ] Demo run-through rehearsed end to end
+
+> ⚠️ **Open item: two unreconciled implementations of the deterministic alert
+> engine.** `app/services/scoring_engine.py` (live, wired to `POST
+> /score/recompute`, verified end-to-end against the real Supabase project) and
+> `backend/retention_radar/alerts.py`'s `evaluate_alert` (same core idea —
+> threshold crossing + 3-period worsening trend — built independently, different
+> scale/severity buckets/dedup strategy, **not imported anywhere in `app/`**) both
+> exist right now. `retention_radar/briefs.py` + `groq.py` is a working, tested Groq
+> brief generator that's also unwired — worth reusing for the LLM-brief step rather
+> than building a third implementation, once the team decides how to reconcile the
+> two alert engines. Flagging here rather than silently picking one — this is
+> exactly the kind of decision HANDOFF §5 says shouldn't get rushed.
 
 ## 3. Stack (reused deliberately, nothing new to learn under time pressure)
 
@@ -175,13 +188,15 @@ Full field list is in the PRD (§6) if the schema file isn't in front of you.
 
 ## 9. Demo script (rehearse this, don't wing it)
 
-1. Portfolio view → 15 seeded accounts, sorted by risk, at-risk revenue
-   total shown at top (now a real number from `total_revenue_at_risk` —
-   $418K across the 3 flagged accounts in the seed data, not a placeholder)
-2. Click into a flagged account → trend charts + plain-language AI brief,
-   backed by `signal_contributions` for "here's exactly why this account is
-   flagged" if a judge pushes on it
-3. Alerts inbox → "this is what an account manager checks every morning"
+1. Portfolio view → 15 real accounts (live Supabase, not a mock), sorted by
+   risk, at-risk revenue total shown at top — $418,369.20 across the 3
+   flagged accounts, a real computed number
+2. Click into a flagged account → real Recharts trend charts per signal +
+   composite-score-over-time chart, backed by `signal_contributions` for
+   "here's exactly why this account is flagged" if a judge pushes on it
+   (AI brief card will render once the Groq wiring above is resolved)
+3. Alerts inbox → real alerts, status-update button works live —
+   "this is what an account manager checks every morning"
 4. Close on the money: one saved $10K/month account ≈ $140K avoided,
    against a $150-300/month price tag
 
