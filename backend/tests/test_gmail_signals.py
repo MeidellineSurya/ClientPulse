@@ -1,7 +1,7 @@
 # Tests for the pure Gmail metadata -> signal computation (no network,
 # no Google API involved).
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from app.services.gmail_signals import MessageMetadata, compute_email_signals
 
@@ -12,7 +12,7 @@ def msg(thread_id, from_addr, hour) -> MessageMetadata:
         thread_id=thread_id,
         from_addr=from_addr,
         to_addr="",
-        date=datetime(2026, 8, 3, hour),
+        date=datetime(2026, 8, 3, hour, tzinfo=UTC),
     )
 
 
@@ -64,3 +64,14 @@ def test_multiple_threads_average_across_all_response_pairs():
 
     assert avg_hours == 3.0
     assert thread_count == 2
+
+
+def test_sender_matching_uses_exact_address_not_substring():
+    messages = [
+        msg("t1", "client@x.com", 9),
+        msg("t1", "notclient@x.com", 12),
+    ]
+
+    avg_hours, _ = compute_email_signals(messages, "client@x.com")
+
+    assert avg_hours == 3.0
