@@ -5,8 +5,9 @@ from app.services.alerts_repo import (
     fetch_alert,
     fetch_alerts_for_account,
     fetch_all_alerts,
-    update_alert_status,
+    update_alert_status_if_current,
 )
+
 from tests.fakes import FakeSupabaseClient
 
 
@@ -56,7 +57,9 @@ def test_fetch_alerts_for_account_sorted_newest_first():
 
 
 def test_fetch_alert_returns_the_matching_row():
-    client = FakeSupabaseClient({"alert": [_alert("a1", "acc-1", "2026-01-01T00:00:00")]})
+    client = FakeSupabaseClient(
+        {"alert": [_alert("a1", "acc-1", "2026-01-01T00:00:00")]}
+    )
     assert fetch_alert(client, "a1")["account_id"] == "acc-1"
 
 
@@ -65,8 +68,24 @@ def test_fetch_alert_returns_none_when_missing():
     assert fetch_alert(client, "ghost") is None
 
 
-def test_update_alert_status_updates_and_returns_the_row():
-    client = FakeSupabaseClient({"alert": [_alert("a1", "acc-1", "2026-01-01T00:00:00", status="open")]})
-    updated = update_alert_status(client, "a1", "acknowledged")
+def test_conditional_alert_status_update_rejects_stale_state():
+    client = FakeSupabaseClient(
+        {"alert": [_alert("a1", "acc-1", "2026-01-01T00:00:00", status="open")]}
+    )
+
+    updated = update_alert_status_if_current(
+        client,
+        "a1",
+        current_status="open",
+        new_status="acknowledged",
+    )
+    stale_update = update_alert_status_if_current(
+        client,
+        "a1",
+        current_status="open",
+        new_status="resolved",
+    )
+
+    assert updated is not None
     assert updated["status"] == "acknowledged"
-    assert client._tables["alert"][0]["status"] == "acknowledged"
+    assert stale_update is None

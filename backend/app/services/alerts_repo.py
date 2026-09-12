@@ -18,19 +18,29 @@ def _fetch_account_names(client: Client, account_ids: list[str]) -> dict[str, st
     return {row["id"]: row["name"] for row in resp.data}
 
 
-def fetch_all_alerts(client: Client) -> list[dict]:
+def fetch_all_alerts(client: Client, status: str | None = None) -> list[dict]:
     """Every alert across every account, newest triggered_at first, each
     with the account's name attached for display."""
-    resp = client.table("alert").select(ALERT_COLUMNS).execute()
+    query = client.table("alert").select(ALERT_COLUMNS)
+    if status is not None:
+        query = query.eq("status", status)
+    resp = query.execute()
     alerts = sorted(resp.data, key=lambda row: row["triggered_at"], reverse=True)
     names = _fetch_account_names(client, [a["account_id"] for a in alerts])
-    return [{**alert, "account_name": names.get(alert["account_id"])} for alert in alerts]
+    return [
+        {**alert, "account_name": names.get(alert["account_id"])} for alert in alerts
+    ]
 
 
 def fetch_alerts_for_account(client: Client, account_id: str) -> list[dict]:
     """One account's alerts, newest triggered_at first — for the account
     detail endpoint (no account_name needed, the caller already has it)."""
-    resp = client.table("alert").select(ALERT_COLUMNS).eq("account_id", account_id).execute()
+    resp = (
+        client.table("alert")
+        .select(ALERT_COLUMNS)
+        .eq("account_id", account_id)
+        .execute()
+    )
     return sorted(resp.data, key=lambda row: row["triggered_at"], reverse=True)
 
 
@@ -39,6 +49,19 @@ def fetch_alert(client: Client, alert_id: str) -> dict | None:
     return resp.data[0] if resp.data else None
 
 
-def update_alert_status(client: Client, alert_id: str, status: str) -> dict:
-    resp = client.table("alert").update({"status": status}).eq("id", alert_id).execute()
-    return resp.data[0]
+def update_alert_status_if_current(
+    client: Client,
+    alert_id: str,
+    *,
+    current_status: str,
+    new_status: str,
+) -> dict | None:
+    """Conditionally update an alert so stale readers cannot regress state."""
+    resp = (
+        client.table("alert")
+        .update({"status": new_status})
+        .eq("id", alert_id)
+        .eq("status", current_status)
+        .execute()
+    )
+    return resp.data[0] if resp.data else None
