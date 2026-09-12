@@ -7,10 +7,13 @@ invoices) before the client says anything.
 > 🚧 Hackathon build. This repo is being scaffolded incrementally — see commit
 > history for progress. Scoring logic, real Gmail/Calendar integration, and auth
 > are intentionally not implemented yet.
+>
+> Pitch, scoring formula, product decisions, and demo script: see
+> [HANDOFF.md](./HANDOFF.md).
 
 ## Stack
 
-- **Frontend:** Next.js 14 (App Router), TypeScript, Tailwind CSS, shadcn/ui, Recharts
+- **Frontend:** React (Vite), TypeScript, React Router, Tailwind CSS, shadcn/ui, Recharts
 - **Backend:** FastAPI (Python 3.11+), Pydantic
 - **Database:** Supabase (Postgres)
 - **LLM:** Groq (`llama-3.3-70b-versatile`)
@@ -20,7 +23,7 @@ invoices) before the client says anything.
 
 ```
 clientpulse/
-├── frontend/       # Next.js app
+├── frontend/       # React (Vite) app
 ├── backend/        # FastAPI app
 ├── supabase/       # schema.sql + seed.sql
 ├── .env.example    # reference of all env vars used across the monorepo
@@ -35,10 +38,10 @@ history). Each app also has its own `.env.example` to copy from.
 ## Status
 
 - [x] Repo scaffolding
-- [ ] Supabase schema
+- [x] Supabase schema
 - [ ] Supabase seed data
 - [ ] FastAPI skeleton
 - [ ] FastAPI endpoints
 - [ ] Groq client stub
-- [ ] Next.js skeleton
+- [ ] React (Vite) skeleton
 - [ ] Frontend pages
