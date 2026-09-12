@@ -188,6 +188,34 @@ def test_recompute_all_scores_totals_revenue_at_risk_across_alerting_accounts_on
     assert body["total_revenue_at_risk"] > 0
 
 
+def test_recompute_all_scores_isolates_a_failing_account_instead_of_aborting_the_batch():
+    # acc-bad has a malformed signal value (float() will raise on it) —
+    # that must not prevent acc-good from being scored.
+    fake_client = FakeSupabaseClient(
+        {
+            "account": [
+                {"id": "acc-bad", "contract_value_monthly": 5000},
+                {"id": "acc-good", "contract_value_monthly": 5000},
+            ],
+            "signal_snapshot": [
+                _snapshot("acc-bad", "2026-01-01", avg_response_time_hours="not-a-number"),
+            ]
+            + _stable_snapshots("acc-good"),
+        }
+    )
+    client = _override_client(fake_client)
+    try:
+        response = client.post("/score/recompute")
+    finally:
+        app.dependency_overrides.pop(scoring._require_supabase_client, None)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["failed_account_ids"] == ["acc-bad"]
+    assert [r["account_id"] for r in body["results"]] == ["acc-good"]
+    assert body["accounts_scored"] == 1
+
+
 def test_recompute_without_supabase_configured_returns_503():
     from app.db import get_supabase_client
 

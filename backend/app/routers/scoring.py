@@ -70,13 +70,20 @@ def recompute_account_score(
 @router.post("/recompute", response_model=RecomputeScoringResponse)
 def recompute_all_scores(client: Client = Depends(_require_supabase_client)) -> RecomputeScoringResponse:
     results = []
+    failed_account_ids = []
     for account_id, contract_value_monthly in fetch_accounts_with_contract_value(client).items():
-        history = fetch_signal_history(client, account_id)
-        if not history:
-            # New account with no signal_snapshot rows yet — skip rather
-            # than fail the whole batch over one account.
-            continue
-        results.append(_score_and_persist(client, account_id, history, contract_value_monthly))
+        try:
+            history = fetch_signal_history(client, account_id)
+            if not history:
+                # New account with no signal_snapshot rows yet — skip
+                # rather than fail the whole batch over one account.
+                continue
+            results.append(_score_and_persist(client, account_id, history, contract_value_monthly))
+        except Exception:
+            # Isolate one account's bad data (e.g. a malformed
+            # signal_snapshot value) or a transient write failure so it
+            # can't take down scoring for the rest of the portfolio.
+            failed_account_ids.append(account_id)
 
     return RecomputeScoringResponse(
         accounts_scored=len(results),
@@ -86,4 +93,5 @@ def recompute_all_scores(client: Client = Depends(_require_supabase_client)) -> 
         # we've flagged" rather than a fuzzier whole-portfolio total.
         total_revenue_at_risk=round(sum(r.revenue_at_risk for r in results if r.alert_fired), 2),
         results=results,
+        failed_account_ids=failed_account_ids,
     )

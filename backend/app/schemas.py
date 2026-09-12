@@ -86,3 +86,7 @@ class RecomputeScoringResponse(BaseModel):
     alerts_fired: int
     total_revenue_at_risk: float
     results: list[AccountScoreResult]
+    # Accounts skipped because scoring raised (e.g. malformed
+    # signal_snapshot data) rather than because they had no history yet —
+    # isolated per-account so one bad account can't 500 the whole batch.
+    failed_account_ids: list[str] = []
