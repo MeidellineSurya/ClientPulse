@@ -83,6 +83,7 @@ def test_recompute_account_score_worsening_account_fires_alert_and_persists_it()
     assert body["severity"] is not None
     assert len(fake_client._tables["alert"]) == 1
     assert fake_client._tables["alert"][0]["account_id"] == "acc-1"
+    assert round(sum(body["signal_contributions"].values()), 0) == 100
     # composite_score should be near the top of the scale for this fixture
     # (see test_scoring_engine.py's equivalent), so revenue_at_risk should
     # be close to the full annualized contract value ($120,000).

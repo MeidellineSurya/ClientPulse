@@ -64,6 +64,11 @@ class AccountScoreResult(BaseModel):
     alert_fired: bool
     severity: str | None
     signals_fired: list[str]
+    # What % of composite_score each signal is responsible for, e.g.
+    # {"avg_response_time_hours": 68.2, ...} — an inspectable breakdown of
+    # the score, not just the score itself. Always present, even when no
+    # alert fired (useful for the account-detail view either way).
+    signal_contributions: dict[str, float]
     # Annualized contract value weighted by composite_score — the dollar
     # figure behind the pitch's money case, not just the abstract score.
     revenue_at_risk: float

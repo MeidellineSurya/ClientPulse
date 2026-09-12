@@ -51,6 +51,7 @@ def _score_and_persist(
         alert_fired=result.alert_fired,
         severity=result.severity,
         signals_fired=result.signals_fired,
+        signal_contributions=result.signal_contributions,
         revenue_at_risk=compute_revenue_at_risk(contract_value_monthly, result.composite_score),
     )
 
