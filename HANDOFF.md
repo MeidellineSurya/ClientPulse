@@ -63,13 +63,23 @@ doc.
       (rolling avg/stddev per signal) + `scoring_engine.py` (drift, weighted composite
       risk, worsening-trend-gated alert decision, exactly the §5 formula) +
       `scoring_repo.py` + `POST /score/recompute[/{account_id}]`, on branch
-      `feat/baseline-scoring-engine`. 51/51 tests passing; validated against the real
+      `feat/baseline-scoring-engine`. 74/74 tests passing; validated against the real
       seed data — flags exactly the 3 seeded worsening accounts (scores 97.6–100),
       clean gap to every stable account (next-highest 38.4). **Not yet run against a
       live Supabase project** (same caveat as ingestion — no live project yet).
       `RISK_ALERT_THRESHOLD=60`, severity buckets (70/85/95), and `Z_CAP=3.0` are
       placeholders empirically tuned against seed data, not values specified in this
       doc — revisit once real accounts flow through ingestion.
+      Also on this branch: **`revenue_at_risk`** per account (annualized contract
+      value × composite_score, feeding §9's "at-risk revenue total" directly) and
+      **`total_revenue_at_risk`** on the batch endpoint (summed across *alerting*
+      accounts only); **`signal_contributions`** — a %-breakdown of which signals
+      drove each score, e.g. "68% response-time drift, 22% cancellations", for the
+      "how is this calculated" answer in §5; alert de-duplication so repeated
+      recompute calls escalate/refresh an account's existing open alert instead of
+      spamming duplicates; and a full pre-PR audit (batch-failure isolation so one
+      bad account can't 500 the whole `/score/recompute` call, a single-point
+      baseline edge case fixed, baseline writes batched into one request).
 - [ ] LLM brief generation wired with real prompt (not stub)
 - [ ] Frontend connected to backend (no more hardcoded arrays)
 - [ ] Live Gmail/Calendar pull (stretch goal, cut first if behind)
@@ -157,8 +167,11 @@ Full field list is in the PRD (§6) if the schema file isn't in front of you.
 ## 9. Demo script (rehearse this, don't wing it)
 
 1. Portfolio view → 15 seeded accounts, sorted by risk, at-risk revenue
-   total shown at top
-2. Click into a flagged account → trend charts + plain-language AI brief
+   total shown at top (now a real number from `total_revenue_at_risk` —
+   $418K across the 3 flagged accounts in the seed data, not a placeholder)
+2. Click into a flagged account → trend charts + plain-language AI brief,
+   backed by `signal_contributions` for "here's exactly why this account is
+   flagged" if a judge pushes on it
 3. Alerts inbox → "this is what an account manager checks every morning"
 4. Close on the money: one saved $10K/month account ≈ $140K avoided,
    against a $150-300/month price tag
