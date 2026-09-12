@@ -6,6 +6,7 @@ from app.services.scoring_engine import (
     RISK_ALERT_THRESHOLD,
     compute_composite_risk,
     compute_drift,
+    compute_revenue_at_risk,
     compute_trend_slope,
     decide_severity,
     score_account_history,
@@ -73,6 +74,22 @@ def test_compute_composite_risk_is_zero_at_baseline():
     score, drifts = compute_composite_risk(current, baselines)
     assert score == 0.0
     assert all(d == 0.0 for d in drifts.values())
+
+
+def test_compute_revenue_at_risk_at_full_score_is_the_full_annual_value():
+    assert compute_revenue_at_risk(contract_value_monthly=10000, composite_score=100) == 120000.0
+
+
+def test_compute_revenue_at_risk_at_zero_score_is_zero():
+    assert compute_revenue_at_risk(contract_value_monthly=10000, composite_score=0) == 0.0
+
+
+def test_compute_revenue_at_risk_scales_proportionally():
+    assert compute_revenue_at_risk(contract_value_monthly=10000, composite_score=50) == 60000.0
+
+
+def test_compute_revenue_at_risk_with_zero_contract_value():
+    assert compute_revenue_at_risk(contract_value_monthly=0, composite_score=100) == 0.0
 
 
 def test_compute_trend_slope_positive_for_worsening_scores():

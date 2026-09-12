@@ -99,6 +99,20 @@ def compute_composite_risk(
     return round(composite * 100, 2), drifts
 
 
+def compute_revenue_at_risk(contract_value_monthly: float, composite_score: float) -> float:
+    """Annualized contract value, weighted by composite_score, as a dollar
+    figure — the number the pitch's money case (HANDOFF.md §1/§9) is built
+    on, not just an abstract 0-100 score.
+
+    A deliberate hackathon-scope simplification: composite_score is a risk
+    *severity* score, not a calibrated churn probability, so this isn't a
+    true expected-value calculation. It's "how much of this account's
+    annual value currently sits in the danger zone" — proportional
+    exposure, which is what the portfolio view's at-risk-revenue total needs.
+    """
+    return round(contract_value_monthly * 12 * (composite_score / 100), 2)
+
+
 def compute_trend_slope(scores: list[float]) -> float:
     """Least-squares slope of composite_score against period index (oldest
     first). Positive means risk is increasing period over period."""
