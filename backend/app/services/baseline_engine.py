@@ -7,7 +7,7 @@ average (see HANDOFF.md §7) — that's the whole reason this module takes a
 single account's history and nothing else.
 """
 
-from statistics import fmean
+from statistics import fmean, stdev
 
 TRACKED_SIGNALS = [
     "avg_response_time_hours",
@@ -36,8 +36,7 @@ def mean_stddev(values: list[float]) -> tuple[float, float | None]:
     avg = fmean(values)
     if n < 2:
         return avg, None
-    variance = sum((v - avg) ** 2 for v in values) / (n - 1)
-    return avg, variance**0.5
+    return avg, stdev(values)
 
 
 def split_baseline_and_trend_windows(history: list[dict]) -> tuple[list[dict], list[dict]]:
