@@ -2,8 +2,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
+from app.routers import ingest
 
 app = FastAPI(title="ClientPulse Ingestion Service")
+app.include_router(ingest.router)
 
 app.add_middleware(
     CORSMiddleware,
