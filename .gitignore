@@ -1,0 +1,30 @@
+# --- Node / Next.js (frontend) ---
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.env
+frontend/.env.local
+frontend/next-env.d.ts
+
+# --- Python / FastAPI (backend) ---
+backend/__pycache__/
+backend/**/__pycache__/
+backend/.venv/
+backend/venv/
+backend/*.egg-info/
+backend/.pytest_cache/
+backend/.env
+
+# --- Env files (never commit real secrets) ---
+.env
+*.env
+!*.env.example
+
+# --- OS / editor ---
+.DS_Store
+.vscode/
+.idea/
+
+# --- Logs ---
+*.log
+npm-debug.log*
