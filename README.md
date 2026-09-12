@@ -5,9 +5,9 @@ that are quietly drifting toward churn (slower replies, more cancellations, late
 invoices) before the client says anything.
 
 > 🚧 Hackathon build. This repo is being scaffolded incrementally — see commit
-> history for progress. Real Gmail/Calendar integration and auth are intentionally
-> not implemented yet. Scoring logic is implemented (see below) but not yet run
-> against a live Supabase project.
+> history for progress. Production Gmail/Calendar OAuth ingestion is implemented,
+> but live-account verification still needs project-specific Google and Supabase
+> credentials. Scoring logic is implemented but not yet run against live Supabase.
 >
 > Pitch, scoring formula, product decisions, and demo script: see
 > [HANDOFF.md](./HANDOFF.md).
@@ -45,10 +45,12 @@ history). Each app also has its own `.env.example` to copy from.
 - [x] FastAPI endpoints (`/ingest/csv`, `GET /accounts[/{id}][/signals]`, `GET /alerts`,
       `POST /alerts/{id}/status` — all real Supabase reads/writes, 98/98 tests;
       `feat/accounts-alerts-endpoints` — not yet run against a live Supabase project)
-- [ ] Gmail/Calendar pull (scaffolded, untested against a live Google account — no credentials yet)
+- [x] Gmail/Calendar OAuth ingestion (metadata-only Gmail + read-only Calendar,
+      explicit token refresh/scope checks, tested API fetch and snapshot-write path)
+- [ ] Live Gmail/Calendar account verification (no project credentials available yet)
 - [x] Scoring engine (`/score/recompute[/{account_id}]` — deterministic composite risk,
       revenue-at-risk, per-signal explainability breakdown, alert dedup; 74/74 tests;
       `feat/baseline-scoring-engine` — not yet run against a live Supabase project)
-- [ ] Groq client stub
+- [x] Groq client stub
 - [ ] React (Vite) skeleton
 - [ ] Frontend pages
