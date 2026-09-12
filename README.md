@@ -6,11 +6,12 @@ invoices) before the client says anything.
 
 > 🚧 Hackathon build. This repo is being scaffolded incrementally — see commit
 > history for progress. Backend + frontend are live and verified end-to-end
-> against a real Supabase project. Production Gmail/Calendar OAuth ingestion is
-> implemented, but live-account verification still needs project-specific Google
-> credentials. **Open item:** two unreconciled implementations of the
-> deterministic alert engine exist (`app/services/scoring_engine.py`, live and
-> wired vs. `backend/retention_radar/alerts.py`, unwired) — see HANDOFF.md.
+> against a real Supabase project, including real Groq-generated AI briefs on
+> alerts. Production Gmail/Calendar OAuth ingestion is implemented, but
+> live-account verification still needs project-specific Google credentials.
+> **Open item:** two unreconciled implementations of the deterministic alert
+> *decision* exist (`app/services/scoring_engine.py`, live and wired vs.
+> `backend/retention_radar/alerts.py`, unwired) — see HANDOFF.md.
 >
 > Pitch, scoring formula, product decisions, and demo script: see
 > [HANDOFF.md](./HANDOFF.md).
@@ -61,6 +62,13 @@ clientpulse/
 endpoint in by mistake produces a `PGRST125` error that looks like the
 project is still provisioning but isn't.
 
+`GROQ_MODEL` must be a currently-live model name — Groq deprecates model
+IDs over time (`llama-3.3-70b-versatile` no longer exists as of this
+writing; `openai/gpt-oss-120b` does). A stale model name fails silently
+from the outside: alerts still get a brief, just always the deterministic
+fallback text, since `app/services/brief_generation.py` catches the error
+and falls back rather than crashing.
+
 ## Status
 
 - [x] Repo scaffolding
@@ -78,7 +86,8 @@ project is still provisioning but isn't.
       `main`, run for real against the live project — 15 accounts scored, 3 alerts
       fired, $418,369.20 total revenue at risk)
 - [x] Groq brief provider implemented (`retention_radar/briefs.py` + `groq.py`) —
-      not wired to any endpoint yet
+      wired into `POST /score/recompute`, verified against the live Supabase
+      project with real LLM-generated briefs
 - [x] React (Vite) frontend — Portfolio, Account Detail, Alerts, Settings, all
       wired to the real backend, verified in an actual browser session
 - [ ] Deployment (Vercel + Railway)

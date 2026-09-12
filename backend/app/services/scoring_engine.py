@@ -69,6 +69,10 @@ class AccountScoringResult:
     severity: str | None
     signals_fired: list[str] = field(default_factory=list)
     signal_contributions: dict[str, float] = field(default_factory=dict)
+    # Composite score for each period in the trend window (oldest first) —
+    # exposed so callers (the Groq brief step) can cite the actual trend,
+    # not just its slope.
+    period_scores: list[float] = field(default_factory=list)
 
 
 def compute_drift(
@@ -209,4 +213,5 @@ def score_account_history(history: list[dict]) -> AccountScoringResult:
         severity=decide_severity(composite_score) if alert_fired else None,
         signals_fired=significant_signals(latest_drifts) if alert_fired else [],
         signal_contributions=compute_signal_contributions(latest_drifts),
+        period_scores=period_scores,
     )

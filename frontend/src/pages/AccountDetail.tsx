@@ -164,7 +164,7 @@ export function AccountDetail() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            <p className="text-sm">{latestAlertWithBrief.ai_brief}</p>
+            <p className="text-sm whitespace-pre-line">{latestAlertWithBrief.ai_brief}</p>
             {latestAlertWithBrief.suggested_action && (
               <p className="text-sm font-medium">Suggested action: {latestAlertWithBrief.suggested_action}</p>
             )}

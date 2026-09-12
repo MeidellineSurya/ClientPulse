@@ -15,6 +15,12 @@ class Settings(BaseSettings):
     supabase_anon_key: str = ""
     supabase_service_role_key: str = ""
 
+    # Groq (LLM brief generation, see app/groq_client.py). Empty api_key
+    # means "not configured" — the brief pipeline falls back to a
+    # deterministic brief rather than failing, so this is safe to leave blank.
+    groq_api_key: str = ""
+    groq_model: str = "openai/gpt-oss-120b"
+
     backend_port: int = 8000
     # Comma-separated list of origins allowed to call this API (CORS).
     # 5173 is Vite's default dev port (frontend is React/Vite, not Next.js).

@@ -67,7 +67,7 @@ def test_recompute_account_score_stable_account_does_not_fire_alert():
 def test_recompute_account_score_worsening_account_fires_alert_and_persists_it():
     fake_client = FakeSupabaseClient(
         {
-            "account": [{"id": "acc-1", "contract_value_monthly": 10000}],
+            "account": [{"id": "acc-1", "name": "Acme", "contract_value_monthly": 10000}],
             "signal_snapshot": _worsening_snapshots("acc-1"),
         }
     )
@@ -137,8 +137,8 @@ def test_recompute_all_scores_skips_accounts_without_history():
     fake_client = FakeSupabaseClient(
         {
             "account": [
-                {"id": "acc-1", "contract_value_monthly": 10000},
-                {"id": "acc-2", "contract_value_monthly": 5000},
+                {"id": "acc-1", "name": "Acme", "contract_value_monthly": 10000},
+                {"id": "acc-2", "name": "Beta", "contract_value_monthly": 5000},
             ],
             "signal_snapshot": _stable_snapshots("acc-1"),  # acc-2 has none yet
         }
@@ -166,8 +166,8 @@ def test_recompute_all_scores_totals_revenue_at_risk_across_alerting_accounts_on
     fake_client = FakeSupabaseClient(
         {
             "account": [
-                {"id": "acc-1", "contract_value_monthly": 10000},
-                {"id": "acc-2", "contract_value_monthly": 8000},
+                {"id": "acc-1", "name": "Acme", "contract_value_monthly": 10000},
+                {"id": "acc-2", "name": "Beta", "contract_value_monthly": 8000},
             ],
             "signal_snapshot": _worsening_snapshots("acc-1") + _stable_snapshots("acc-2"),
         }
@@ -194,8 +194,8 @@ def test_recompute_all_scores_isolates_a_failing_account_instead_of_aborting_the
     fake_client = FakeSupabaseClient(
         {
             "account": [
-                {"id": "acc-bad", "contract_value_monthly": 5000},
-                {"id": "acc-good", "contract_value_monthly": 5000},
+                {"id": "acc-bad", "name": "Bad Co", "contract_value_monthly": 5000},
+                {"id": "acc-good", "name": "Good Co", "contract_value_monthly": 5000},
             ],
             "signal_snapshot": [
                 _snapshot("acc-bad", "2026-01-01", avg_response_time_hours="not-a-number"),

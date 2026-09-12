@@ -60,7 +60,17 @@ doc.
       snapshot-write path without reading message bodies. Live-account verification
       still needs project-specific Google credentials (Supabase side is now live).
 - [x] Groq brief provider implemented (`openai/gpt-oss-120b`, validated JSON +
-      deterministic fallback) — see ⚠️ below, **not wired to any endpoint yet**.
+      deterministic fallback) — **now wired into `POST /score/recompute`**
+      (`app/groq_client.py` + `app/services/brief_generation.py`). Fixed 3 real
+      bugs found while getting a live call to actually succeed: `retention_radar
+      /groq.py`'s bare `urllib` had no CA cert bundle (fails on any python.org
+      macOS install), Groq's Cloudflare front blocks Python's default
+      User-Agent as a bot signature, and the test suite would otherwise make
+      real network calls to Groq on every run (fixed with an autouse
+      `tests/conftest.py` fixture). Verified against the live Supabase project
+      with a real `GROQ_API_KEY` — alerts now carry genuine LLM-generated
+      briefs, confirmed causal-claim-free and auto-contact-free by inspecting
+      the actual text.
 - [x] Deterministic alert trigger implemented — see ⚠️ below, **two unreconciled
       implementations exist**.
 - [x] Frontend (Vite + React) skeleton running — on `feat/frontend-app`, merged with
@@ -88,7 +98,7 @@ doc.
       alert de-duplication so repeated recompute calls escalate/refresh an existing
       open alert instead of spamming duplicates.
 - [x] LLM brief generation implemented with real evidence-bound prompt (`retention_radar/briefs.py`)
-      — **route/database wiring still pending**, see ⚠️ below
+      and **now fully wired end-to-end** — see the Groq brief provider item above
 - [x] Frontend connected to backend — real fetches throughout, no hardcoded arrays,
       verified in an actual headless-browser session against the live project
 - [ ] Live Gmail/Calendar pull (stretch goal, cut first if behind — no Google
@@ -96,16 +106,20 @@ doc.
 - [ ] Demo run-through rehearsed end to end
 
 > ⚠️ **Open item: two unreconciled implementations of the deterministic alert
-> engine.** `app/services/scoring_engine.py` (live, wired to `POST
+> *decision*.** `app/services/scoring_engine.py` (live, wired to `POST
 > /score/recompute`, verified end-to-end against the real Supabase project) and
 > `backend/retention_radar/alerts.py`'s `evaluate_alert` (same core idea —
 > threshold crossing + 3-period worsening trend — built independently, different
-> scale/severity buckets/dedup strategy, **not imported anywhere in `app/`**) both
-> exist right now. `retention_radar/briefs.py` + `groq.py` is a working, tested Groq
-> brief generator that's also unwired — worth reusing for the LLM-brief step rather
-> than building a third implementation, once the team decides how to reconcile the
-> two alert engines. Flagging here rather than silently picking one — this is
-> exactly the kind of decision HANDOFF §5 says shouldn't get rushed.
+> scale/severity buckets/dedup strategy, **still not imported anywhere in
+> `app/`**) both exist right now. The team needs to decide whether to keep only
+> one, or under what circumstances (if any) the second would ever run. Flagging
+> here rather than silently picking one — this is exactly the kind of decision
+> HANDOFF §5 says shouldn't get rushed.
+>
+> **Resolved:** the brief-*generation* half of this — `retention_radar
+> /briefs.py` + `groq.py` is now the one and only brief generator, wired into
+> `scoring_engine.py`'s pipeline (see the Groq brief provider item in §2). No
+> third implementation was built; the decision engine stayed singular.
 
 ## 3. Stack (reused deliberately, nothing new to learn under time pressure)
 
@@ -192,9 +206,10 @@ Full field list is in the PRD (§6) if the schema file isn't in front of you.
    risk, at-risk revenue total shown at top — $418,369.20 across the 3
    flagged accounts, a real computed number
 2. Click into a flagged account → real Recharts trend charts per signal +
-   composite-score-over-time chart, backed by `signal_contributions` for
-   "here's exactly why this account is flagged" if a judge pushes on it
-   (AI brief card will render once the Groq wiring above is resolved)
+   composite-score-over-time chart, plus a real Groq-generated AI brief card
+   citing the actual `signal_contributions` — "here's exactly why this
+   account is flagged," in the account manager's own words, if a judge
+   pushes on it
 3. Alerts inbox → real alerts, status-update button works live —
    "this is what an account manager checks every morning"
 4. Close on the money: one saved $10K/month account ≈ $140K avoided,
