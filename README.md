@@ -42,6 +42,6 @@ history). Each app also has its own `.env.example` to copy from.
 - [ ] Supabase seed data
 - [ ] FastAPI skeleton
 - [ ] FastAPI endpoints
-- [ ] Groq client stub
+- [x] Groq brief provider and deterministic alert module
 - [ ] React (Vite) skeleton
 - [ ] Frontend pages
