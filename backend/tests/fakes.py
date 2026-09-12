@@ -11,6 +11,8 @@ class FakeQuery:
         self._rows = table
         self._payload: dict | None = None
         self._insert_payload: dict | None = None
+        self._upsert_payload: dict | None = None
+        self._on_conflict: str | None = None
 
     def select(self, *_args, **_kwargs) -> "FakeQuery":
         return self
@@ -32,7 +34,30 @@ class FakeQuery:
         self._insert_payload = dict(payload)
         return self
 
+    def upsert(self, payload: dict, on_conflict: str | None = None) -> "FakeQuery":
+        self._upsert_payload = dict(payload)
+        self._on_conflict = on_conflict
+        return self
+
     def execute(self) -> SimpleNamespace:
+        if self._upsert_payload is not None:
+            # Mimics ON CONFLICT (on_conflict) DO UPDATE: match against the
+            # unfiltered table by the conflict columns, update in place if
+            # found, otherwise insert a new row.
+            conflict_columns = [c.strip() for c in (self._on_conflict or "").split(",") if c.strip()]
+            existing = next(
+                (
+                    row
+                    for row in self._table
+                    if conflict_columns and all(row.get(c) == self._upsert_payload.get(c) for c in conflict_columns)
+                ),
+                None,
+            )
+            if existing is not None:
+                existing.update(self._upsert_payload)
+                return SimpleNamespace(data=[existing])
+            self._table.append(self._upsert_payload)
+            return SimpleNamespace(data=[self._upsert_payload])
         if self._insert_payload is not None:
             # Mutate the underlying table (not just the filtered _rows view)
             # so a later fetch on the same fake client sees the new row.
@@ -49,4 +74,6 @@ class FakeSupabaseClient:
         self._tables = tables
 
     def table(self, name: str) -> FakeQuery:
-        return FakeQuery(self._tables[name])
+        # setdefault so tests don't need to pre-declare every table they
+        # don't care about (e.g. scoring tests that never touch `account`).
+        return FakeQuery(self._tables.setdefault(name, []))
