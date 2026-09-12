@@ -53,7 +53,8 @@ doc.
       on the pure signal computation + repo logic, but **not exercised against a live
       Google account** — no OAuth credentials available in this environment. Needs real
       `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`/`GOOGLE_REFRESH_TOKEN` to actually run.
-- [ ] Groq client stub in place
+- [x] Groq brief provider implemented (`openai/gpt-oss-120b`, validated JSON + deterministic fallback)
+- [x] Deterministic alert trigger implemented (threshold crossing + 3-period worsening trend + episode key)
 - [ ] Frontend (Vite + React) skeleton running
 - [ ] Portfolio page (hardcoded data)
 - [ ] Account detail page (hardcoded data + charts)
@@ -80,7 +81,7 @@ doc.
       spamming duplicates; and a full pre-PR audit (batch-failure isolation so one
       bad account can't 500 the whole `/score/recompute` call, a single-point
       baseline edge case fixed, baseline writes batched into one request).
-- [ ] LLM brief generation wired with real prompt (not stub)
+- [x] LLM brief generation implemented with real evidence-bound prompt (route/database wiring pending)
 - [ ] Frontend connected to backend (no more hardcoded arrays)
 - [ ] Live Gmail/Calendar pull (stretch goal, cut first if behind)
 - [ ] Demo run-through rehearsed end to end
@@ -92,7 +93,7 @@ doc.
 | Frontend | React (Vite) + TypeScript + React Router + Tailwind + shadcn/ui + Recharts |
 | Backend | FastAPI (Python) |
 | Database | Supabase (Postgres) |
-| LLM | Groq — `llama-3.3-70b-versatile` |
+| LLM | Groq — `openai/gpt-oss-120b` |
 | Data sources | Gmail + Google Calendar (live-capable in this environment) + CSV upload for invoices |
 | Deploy | Vercel (frontend) / Railway (backend) |
 

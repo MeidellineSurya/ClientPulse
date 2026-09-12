@@ -17,7 +17,7 @@ invoices) before the client says anything.
 - **Frontend:** React (Vite), TypeScript, React Router, Tailwind CSS, shadcn/ui, Recharts
 - **Backend:** FastAPI (Python 3.11+), Pydantic
 - **Database:** Supabase (Postgres)
-- **LLM:** Groq (`llama-3.3-70b-versatile`)
+- **LLM:** Groq (`openai/gpt-oss-120b`)
 - **Deploy:** Vercel (frontend), Railway (backend)
 
 ## Monorepo layout
@@ -47,6 +47,6 @@ history). Each app also has its own `.env.example` to copy from.
 - [x] Scoring engine (`/score/recompute[/{account_id}]` — deterministic composite risk,
       revenue-at-risk, per-signal explainability breakdown, alert dedup; 74/74 tests;
       `feat/baseline-scoring-engine` — not yet run against a live Supabase project)
-- [ ] Groq client stub
+- [x] Groq brief provider and deterministic alert module
 - [ ] React (Vite) skeleton
 - [ ] Frontend pages
