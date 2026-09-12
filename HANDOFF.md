@@ -44,10 +44,10 @@ doc.
       worse — `backend/scripts/generate_seed.py` -> `supabase/seed.sql`; not yet
       applied to a live Supabase project)
 - [x] FastAPI skeleton running (`/health` responds)
-- [ ] FastAPI endpoints stubbed (`/accounts`, `/alerts`, `/ingest/csv`) — `/ingest/csv`
-      done and fully wired to Supabase (parses CSV, matches account/period, writes
-      `invoice_days_late`, tested); `/accounts` and `/alerts` not started (owned by
-      other workstreams, not ingestion)
+- [x] FastAPI endpoints implemented (`/accounts`, `/alerts`, `/ingest/csv`) — `/accounts`
+      returns the portfolio and per-account score/signal/alert history; `/alerts` returns
+      a filterable inbox and supports acknowledge/resolve status updates; `/ingest/csv`
+      parses CSV, matches account/period, and writes `invoice_days_late` to Supabase.
 - [ ] Gmail/Calendar pull (stretch) — `/ingest/gmail-calendar/{account_id}` scaffolded
       end-to-end (metadata-only Gmail scope, Calendar events, DB upsert) and unit-tested
       on the pure signal computation + repo logic, but **not exercised against a live

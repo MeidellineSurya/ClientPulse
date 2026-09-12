@@ -1,8 +1,78 @@
 # Pydantic request/response models for the /ingest/csv endpoint.
 
-from datetime import date
+from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel
+
+
+class AccountSummary(BaseModel):
+    id: str
+    agency_id: str
+    name: str
+    contract_value_monthly: float
+    contract_start_date: date
+    primary_contact_email: str | None
+    created_at: datetime
+    latest_composite_score: float | None = None
+    latest_trend_slope: float | None = None
+    latest_score_at: datetime | None = None
+    active_alert_count: int = 0
+
+
+class AccountListResponse(BaseModel):
+    total: int
+    accounts: list[AccountSummary]
+
+
+class HealthScoreSnapshot(BaseModel):
+    id: str
+    account_id: str
+    computed_at: datetime
+    composite_score: float
+    trend_slope: float
+
+
+class SignalSnapshot(BaseModel):
+    id: str
+    account_id: str
+    period_start: date
+    period_end: date
+    avg_response_time_hours: float
+    meetings_scheduled: int
+    meetings_cancelled: int
+    invoice_days_late: int
+    email_thread_count: int
+
+
+class AlertItem(BaseModel):
+    id: str
+    account_id: str
+    triggered_at: datetime
+    signals_fired: list[str]
+    severity: Literal["low", "medium", "high", "critical"]
+    ai_brief: str | None = None
+    suggested_action: str | None = None
+    status: Literal["open", "acknowledged", "resolved"]
+
+
+class AlertInboxItem(AlertItem):
+    account_name: str
+
+
+class AlertListResponse(BaseModel):
+    total: int
+    alerts: list[AlertInboxItem]
+
+
+class AlertStatusUpdate(BaseModel):
+    status: Literal["acknowledged", "resolved"]
+
+
+class AccountDetail(AccountSummary):
+    score_history: list[HealthScoreSnapshot]
+    signal_history: list[SignalSnapshot]
+    alerts: list[AlertItem]
 
 
 class ParsedInvoiceRow(BaseModel):

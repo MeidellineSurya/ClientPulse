@@ -5,11 +5,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import ingest, scoring
+from app.routers import accounts, alerts, ingest, scoring
 
 app = FastAPI(title="ClientPulse Ingestion Service")
 
-# Mount the /ingest/* and /score/* routers.
+# Mount the backend API routers.
+app.include_router(accounts.router)
+app.include_router(alerts.router)
 app.include_router(ingest.router)
 app.include_router(scoring.router)
 

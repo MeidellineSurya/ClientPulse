@@ -1,6 +1,6 @@
 # Retention alert and brief module
 
-This branch implements the backend team's deterministic alert boundary and the evidence-bound LLM brief that follows it. It does **not** calculate composite risk scores, write to Supabase, expose HTTP routes, or contact clients.
+The `retention_radar` package implements the deterministic alert boundary and the evidence-bound LLM brief that follows it. It does **not** calculate composite risk scores, write to Supabase, or contact clients. The FastAPI account and alert routes documented below expose database-backed portfolio and inbox data while keeping scoring deterministic.
 
 ## Contract
 
@@ -42,3 +42,14 @@ PYTHONPATH=. python3 -m unittest discover -s tests -v
 ```
 
 The tests make no network calls and require no API key.
+
+## Account and alert endpoints
+
+All database-backed endpoints return `503` when Supabase is not configured.
+
+- `GET /accounts` — alphabetized portfolio summaries with the latest score and active-alert count.
+- `GET /accounts/{account_id}` — account metadata plus chronological score/signal history and newest-first alerts.
+- `GET /alerts` — newest-first alert inbox; optionally filter with `?status=open|acknowledged|resolved`.
+- `PATCH /alerts/{alert_id}` — update an alert to `acknowledged` or `resolved`.
+
+Unknown account and alert IDs return `404`; invalid status values return FastAPI validation errors without touching Supabase.

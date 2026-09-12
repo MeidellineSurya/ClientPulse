@@ -42,7 +42,7 @@ history). Each app also has its own `.env.example` to copy from.
 - [x] Supabase schema
 - [x] Supabase seed data (generated, not yet applied to a live project)
 - [x] FastAPI skeleton
-- [ ] FastAPI endpoints (`/ingest/csv` done; `/accounts`, `/alerts` pending)
+- [x] FastAPI endpoints (`/ingest/csv`, `/accounts`, `/alerts`)
 - [ ] Gmail/Calendar pull (scaffolded, untested against a live Google account — no credentials yet)
 - [x] Scoring engine (`/score/recompute[/{account_id}]` — deterministic composite risk,
       revenue-at-risk, per-signal explainability breakdown, alert dedup; 74/74 tests;
