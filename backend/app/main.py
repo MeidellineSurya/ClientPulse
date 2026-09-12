@@ -9,11 +9,11 @@ from app.routers import accounts, alerts, ingest, scoring
 
 app = FastAPI(title="ClientPulse Ingestion Service")
 
-# Mount the backend API routers.
-app.include_router(accounts.router)
-app.include_router(alerts.router)
+# Mount the /ingest/*, /score/*, /accounts/*, and /alerts/* routers.
 app.include_router(ingest.router)
 app.include_router(scoring.router)
+app.include_router(accounts.router)
+app.include_router(alerts.router)
 
 # Allow the frontend (origins from CORS_ALLOWED_ORIGINS) to call this API
 # from the browser.

@@ -1,81 +1,76 @@
-"""Alert inbox endpoints for ClientPulse."""
+"""Read and safely update the portfolio alert inbox."""
 
 from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.db import get_supabase_client
-from app.schemas import AlertInboxItem, AlertListResponse, AlertStatusUpdate
-from app.services.account_alert_repo import (
-    account_names_by_id,
-    get_account,
-    get_alert,
+from app.dependencies import require_supabase_client
+from app.schemas import AlertOut, UpdateAlertStatusRequest
+from app.services.alerts_repo import (
+    fetch_alert,
+    fetch_all_alerts,
     update_alert_status_if_current,
 )
-from app.services.account_alert_repo import (
-    list_alerts as repo_list_alerts,
-)
-from supabase import Client  # type: ignore[attr-defined]
+from supabase import Client
 
 router = APIRouter(prefix="/alerts", tags=["alerts"])
+AlertStatus = Literal["open", "acknowledged", "resolved"]
 
 
-def _require_supabase_client() -> Client:
-    try:
-        return get_supabase_client()
-    except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-
-
-@router.get("", response_model=AlertListResponse)
+@router.get("", response_model=list[AlertOut])
 def list_alerts(
-    status: Literal["open", "acknowledged", "resolved"] | None = None,
-    client: Client = Depends(_require_supabase_client),  # noqa: B008 - FastAPI dependency
-) -> AlertListResponse:
-    alert_rows = repo_list_alerts(client, status=status)
-    account_names = account_names_by_id(client)
-
-    alerts = [
-        AlertInboxItem(
-            **row, account_name=account_names.get(row["account_id"], "Unknown account")
-        )
-        for row in sorted(
-            alert_rows, key=lambda item: item["triggered_at"], reverse=True
-        )
-    ]
-    return AlertListResponse(total=len(alerts), alerts=alerts)
+    status: AlertStatus | None = None,
+    client: Client = Depends(require_supabase_client),  # noqa: B008 - FastAPI dependency
+) -> list[AlertOut]:
+    return [AlertOut(**row) for row in fetch_all_alerts(client, status=status)]
 
 
-@router.patch("/{alert_id}", response_model=AlertInboxItem)
-def update_alert_status(
+def _transition_alert_status(
     alert_id: UUID,
-    update: AlertStatusUpdate,
-    client: Client = Depends(_require_supabase_client),  # noqa: B008 - FastAPI dependency
-) -> AlertInboxItem:
+    body: UpdateAlertStatusRequest,
+    client: Client,
+) -> AlertOut:
     alert_key = str(alert_id)
-    current = get_alert(client, alert_key)
-    if current is None:
-        raise HTTPException(status_code=404, detail="alert not found")
-    if current["status"] == "resolved" and update.status != "resolved":
+    existing = fetch_alert(client, alert_key)
+    if existing is None:
+        raise HTTPException(status_code=404, detail=f"alert {alert_key} not found")
+    if existing["status"] == "resolved" and body.status != "resolved":
         raise HTTPException(
             status_code=409, detail="resolved alerts cannot be reopened"
         )
-
-    if current["status"] == update.status:
-        row = current
-    else:
-        updated = update_alert_status_if_current(
-            client,
-            alert_key,
-            current_status=current["status"],
-            new_status=update.status,
+    status_rank = {"open": 0, "acknowledged": 1, "resolved": 2}
+    if status_rank[body.status] < status_rank[existing["status"]]:
+        raise HTTPException(
+            status_code=409, detail="alert status cannot move backwards"
         )
-        if updated is None:
-            raise HTTPException(
-                status_code=409, detail="alert status changed concurrently"
-            )
-        row = updated
-    account = get_account(client, row["account_id"])
-    account_name = account["name"] if account else "Unknown account"
-    return AlertInboxItem(**row, account_name=account_name)
+    if existing["status"] == body.status:
+        return AlertOut(**existing, account_name=None)
+
+    updated = update_alert_status_if_current(
+        client,
+        alert_key,
+        current_status=existing["status"],
+        new_status=body.status,
+    )
+    if updated is None:
+        raise HTTPException(status_code=409, detail="alert status changed concurrently")
+    return AlertOut(**updated, account_name=None)
+
+
+@router.post("/{alert_id}/status", response_model=AlertOut)
+def set_alert_status(
+    alert_id: UUID,
+    body: UpdateAlertStatusRequest,
+    client: Client = Depends(require_supabase_client),  # noqa: B008 - FastAPI dependency
+) -> AlertOut:
+    return _transition_alert_status(alert_id, body, client)
+
+
+@router.patch("/{alert_id}", response_model=AlertOut)
+def patch_alert_status(
+    alert_id: UUID,
+    body: UpdateAlertStatusRequest,
+    client: Client = Depends(require_supabase_client),  # noqa: B008 - FastAPI dependency
+) -> AlertOut:
+    return _transition_alert_status(alert_id, body, client)

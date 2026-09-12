@@ -6,75 +6,6 @@ from typing import Literal
 from pydantic import BaseModel
 
 
-class AccountSummary(BaseModel):
-    id: str
-    agency_id: str
-    name: str
-    contract_value_monthly: float
-    contract_start_date: date
-    primary_contact_email: str | None
-    created_at: datetime
-    latest_composite_score: float | None = None
-    latest_trend_slope: float | None = None
-    latest_score_at: datetime | None = None
-    active_alert_count: int = 0
-
-
-class AccountListResponse(BaseModel):
-    total: int
-    accounts: list[AccountSummary]
-
-
-class HealthScoreSnapshot(BaseModel):
-    id: str
-    account_id: str
-    computed_at: datetime
-    composite_score: float
-    trend_slope: float
-
-
-class SignalSnapshot(BaseModel):
-    id: str
-    account_id: str
-    period_start: date
-    period_end: date
-    avg_response_time_hours: float
-    meetings_scheduled: int
-    meetings_cancelled: int
-    invoice_days_late: int
-    email_thread_count: int
-
-
-class AlertItem(BaseModel):
-    id: str
-    account_id: str
-    triggered_at: datetime
-    signals_fired: list[str]
-    severity: Literal["low", "medium", "high", "critical"]
-    ai_brief: str | None = None
-    suggested_action: str | None = None
-    status: Literal["open", "acknowledged", "resolved"]
-
-
-class AlertInboxItem(AlertItem):
-    account_name: str
-
-
-class AlertListResponse(BaseModel):
-    total: int
-    alerts: list[AlertInboxItem]
-
-
-class AlertStatusUpdate(BaseModel):
-    status: Literal["acknowledged", "resolved"]
-
-
-class AccountDetail(AccountSummary):
-    score_history: list[HealthScoreSnapshot]
-    signal_history: list[SignalSnapshot]
-    alerts: list[AlertItem]
-
-
 class ParsedInvoiceRow(BaseModel):
     # One successfully parsed & validated row from an uploaded invoice CSV,
     # with invoice_days_late already computed.
@@ -160,3 +91,64 @@ class RecomputeScoringResponse(BaseModel):
     # signal_snapshot data) rather than because they had no history yet —
     # isolated per-account so one bad account can't 500 the whole batch.
     failed_account_ids: list[str] = []
+
+
+class AlertOut(BaseModel):
+    # One alert row. account_name is joined in for display (see
+    # app/services/alerts_repo.py) — None on the account-detail endpoint's
+    # nested alerts, where the caller already has the account in hand.
+    id: str
+    account_id: str
+    account_name: str | None = None
+    triggered_at: datetime
+    signals_fired: list[str]
+    severity: str
+    ai_brief: str | None
+    suggested_action: str | None
+    status: str
+
+
+class UpdateAlertStatusRequest(BaseModel):
+    # Body for POST /alerts/{id}/status. Literal mirrors schema.sql's
+    # alert.status CHECK constraint, so an invalid value 422s automatically
+    # instead of reaching the database.
+    status: Literal["open", "acknowledged", "resolved"]
+
+
+class AccountSummary(BaseModel):
+    # One row of GET /accounts — the portfolio table. composite_score/
+    # trend_slope/health_computed_at are None for an account that hasn't
+    # been scored yet (no health_score row written for it).
+    id: str
+    name: str
+    contract_value_monthly: float
+    composite_score: float | None
+    trend_slope: float | None
+    health_computed_at: datetime | None
+
+
+class SignalSnapshotOut(BaseModel):
+    # One signal_snapshot row, for chart data (GET /accounts/{id}/signals
+    # and the signal_history list on GET /accounts/{id}).
+    period_start: date
+    period_end: date
+    avg_response_time_hours: float
+    meetings_scheduled: int
+    meetings_cancelled: int
+    invoice_days_late: int
+    email_thread_count: int
+
+
+class AccountDetail(BaseModel):
+    # GET /accounts/{id}: account info + latest score + full signal history
+    # + this account's alerts, in one response.
+    id: str
+    name: str
+    contract_value_monthly: float
+    contract_start_date: date
+    primary_contact_email: str | None
+    composite_score: float | None
+    trend_slope: float | None
+    health_computed_at: datetime | None
+    signal_history: list[SignalSnapshotOut]
+    alerts: list[AlertOut]

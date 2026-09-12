@@ -1,103 +1,85 @@
-"""Read endpoints for ClientPulse accounts."""
+"""Read-only account views for the portfolio and account detail pages."""
 
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.db import get_supabase_client
-from app.schemas import AccountDetail, AccountListResponse
-from app.services.account_alert_repo import (
-    get_account as repo_get_account,
+from app.dependencies import require_supabase_client
+from app.schemas import AccountDetail, AccountSummary, SignalSnapshotOut
+from app.services.accounts_repo import (
+    fetch_account,
+    fetch_all_accounts,
+    fetch_full_signal_history,
+    fetch_latest_health_score,
+    fetch_latest_health_scores,
 )
-from app.services.account_alert_repo import (
-    list_accounts as repo_list_accounts,
-)
-from app.services.account_alert_repo import (
-    list_active_alerts,
-    list_alerts,
-    list_health_scores,
-    list_signal_snapshots,
-)
-from supabase import Client  # type: ignore[attr-defined]
+from app.services.alerts_repo import fetch_alerts_for_account
+from supabase import Client
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
 
 
-def _require_supabase_client() -> Client:
-    try:
-        return get_supabase_client()
-    except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-
-
-@router.get("", response_model=AccountListResponse)
+@router.get("", response_model=list[AccountSummary])
 def list_accounts(
-    client: Client = Depends(_require_supabase_client),  # noqa: B008 - FastAPI dependency
-) -> AccountListResponse:
-    account_rows = repo_list_accounts(client)
-    score_rows = list_health_scores(client)
-    active_alert_rows = list_active_alerts(client)
-
-    latest_scores: dict[str, dict] = {}
-    for score in score_rows:
-        account_id = score["account_id"]
-        if (
-            account_id not in latest_scores
-            or score["computed_at"] > latest_scores[account_id]["computed_at"]
-        ):
-            latest_scores[account_id] = score
-
-    active_counts: dict[str, int] = {}
-    for alert in active_alert_rows:
-        account_id = alert["account_id"]
-        active_counts[account_id] = active_counts.get(account_id, 0) + 1
-
-    accounts = []
-    for row in sorted(account_rows, key=lambda item: item["name"].casefold()):
-        latest = latest_scores.get(row["id"])
-        accounts.append(
-            {
-                **row,
-                "latest_composite_score": latest["composite_score"] if latest else None,
-                "latest_trend_slope": latest["trend_slope"] if latest else None,
-                "latest_score_at": latest["computed_at"] if latest else None,
-                "active_alert_count": active_counts.get(row["id"], 0),
-            }
+    client: Client = Depends(require_supabase_client),  # noqa: B008 - FastAPI dependency
+) -> list[AccountSummary]:
+    accounts = fetch_all_accounts(client)
+    latest_scores = fetch_latest_health_scores(client)
+    return [
+        AccountSummary(
+            id=account["id"],
+            name=account["name"],
+            contract_value_monthly=account["contract_value_monthly"],
+            composite_score=(latest_scores.get(account["id"]) or {}).get(
+                "composite_score"
+            ),
+            trend_slope=(latest_scores.get(account["id"]) or {}).get("trend_slope"),
+            health_computed_at=(latest_scores.get(account["id"]) or {}).get(
+                "computed_at"
+            ),
         )
-    return AccountListResponse(total=len(accounts), accounts=accounts)
+        for account in accounts
+    ]
 
 
 @router.get("/{account_id}", response_model=AccountDetail)
 def get_account_detail(
     account_id: UUID,
-    client: Client = Depends(_require_supabase_client),  # noqa: B008 - FastAPI dependency
+    client: Client = Depends(require_supabase_client),  # noqa: B008 - FastAPI dependency
 ) -> AccountDetail:
     account_key = str(account_id)
-    account = repo_get_account(client, account_key)
+    account = fetch_account(client, account_key)
     if account is None:
-        raise HTTPException(status_code=404, detail="account not found")
+        raise HTTPException(status_code=404, detail=f"account {account_key} not found")
 
-    score_rows = list_health_scores(client, account_key)
-    signal_rows = list_signal_snapshots(client, account_key)
-    alert_rows = list_alerts(client, account_id=account_key)
+    latest_score = fetch_latest_health_score(client, account_key) or {}
+    signal_history = fetch_full_signal_history(client, account_key)
+    alerts = fetch_alerts_for_account(client, account_key)
 
-    scores = sorted(score_rows, key=lambda row: row["computed_at"])
-    signals = sorted(signal_rows, key=lambda row: row["period_start"])
-    alerts = sorted(alert_rows, key=lambda row: row["triggered_at"], reverse=True)
-    latest = scores[-1] if scores else None
-    active_alert_count = sum(
-        1 for alert in alerts if alert["status"] in {"open", "acknowledged"}
+    return AccountDetail(
+        id=account["id"],
+        name=account["name"],
+        contract_value_monthly=account["contract_value_monthly"],
+        contract_start_date=account["contract_start_date"],
+        primary_contact_email=account.get("primary_contact_email"),
+        composite_score=latest_score.get("composite_score"),
+        trend_slope=latest_score.get("trend_slope"),
+        health_computed_at=latest_score.get("computed_at"),
+        signal_history=[SignalSnapshotOut(**row) for row in signal_history],
+        alerts=alerts,
     )
 
-    return AccountDetail.model_validate(
-        {
-            **account,
-            "latest_composite_score": latest["composite_score"] if latest else None,
-            "latest_trend_slope": latest["trend_slope"] if latest else None,
-            "latest_score_at": latest["computed_at"] if latest else None,
-            "active_alert_count": active_alert_count,
-            "score_history": scores,
-            "signal_history": signals,
-            "alerts": alerts,
-        }
-    )
+
+@router.get("/{account_id}/signals", response_model=list[SignalSnapshotOut])
+def get_account_signals(
+    account_id: UUID,
+    client: Client = Depends(require_supabase_client),  # noqa: B008 - FastAPI dependency
+) -> list[SignalSnapshotOut]:
+    account_key = str(account_id)
+    account = fetch_account(client, account_key)
+    if account is None:
+        raise HTTPException(status_code=404, detail=f"account {account_key} not found")
+    return [
+        SignalSnapshotOut(**row)
+        for row in fetch_full_signal_history(client, account_key)
+    ]

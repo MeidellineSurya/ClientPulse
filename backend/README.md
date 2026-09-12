@@ -1,6 +1,6 @@
 # Retention alert and brief module
 
-The `retention_radar` package implements the deterministic alert boundary and the evidence-bound LLM brief that follows it. It does **not** calculate composite risk scores, write to Supabase, or contact clients. The FastAPI account and alert routes documented below expose database-backed portfolio and inbox data while keeping scoring deterministic.
+This branch implements the backend team's deterministic alert boundary and the evidence-bound LLM brief that follows it. It does **not** calculate composite risk scores, write to Supabase, expose HTTP routes, or contact clients.
 
 ## Contract
 
@@ -43,13 +43,40 @@ PYTHONPATH=. python3 -m unittest discover -s tests -v
 
 The tests make no network calls and require no API key.
 
-## Account and alert endpoints
+## Gmail and Calendar ingestion
 
-All database-backed endpoints return `503` when Supabase is not configured.
+`POST /ingest/gmail-calendar/{account_id}` refreshes a narrowly scoped OAuth token,
+reads Gmail **headers only** plus read-only Calendar events, computes the account's
+response-time, thread-count, meeting, and cancellation signals, then upserts the
+requested `signal_snapshot` period. Message bodies remain inaccessible because the
+refresh token must carry only these scopes:
 
-- `GET /accounts` — alphabetized portfolio summaries with the latest score and active-alert count.
-- `GET /accounts/{account_id}` — account metadata plus chronological score/signal history and newest-first alerts.
-- `GET /alerts` — newest-first alert inbox; optionally filter with `?status=open|acknowledged|resolved`.
-- `PATCH /alerts/{alert_id}` — update an alert to `acknowledged` or `resolved`.
+- `https://www.googleapis.com/auth/gmail.metadata`
+- `https://www.googleapis.com/auth/calendar.readonly`
 
-Unknown account and alert IDs return `404`; invalid status values return FastAPI validation errors without touching Supabase.
+Configure `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REFRESH_TOKEN` in
+`backend/.env`. Obtain the refresh token with offline access and explicit consent for
+exactly the two scopes above; do not commit or print it. The Gmail API forbids its
+server-side `q` filter under `gmail.metadata`, so the backend paginates metadata and
+filters exact participant addresses and UTC-normalized dates locally.
+
+Example after configuring Google and Supabase credentials:
+
+```bash
+curl -X POST \
+  "http://localhost:8000/ingest/gmail-calendar/ACCOUNT_UUID?period_start=2026-09-01&period_end=2026-09-07"
+```
+
+Both period bounds must be supplied together and `period_end` cannot precede
+`period_start`. Omitting both defaults to the current Monday–Sunday week. OAuth
+failures return `503`; Gmail/Calendar API failures return `502`; no snapshot is written
+unless both Google reads succeed.
+
+The hackathon API does not yet provide application-level authentication. Keep this
+route on a private network or behind an authenticated gateway; do not expose a
+mailbox-scanning, service-role-backed ingestion endpoint directly to the public internet.
+
+Calendar cancellation counts are observational: attendee-less cancelled items returned by
+the exact contact query are attributed to that contact, but this polling route is not a
+durable Calendar change ledger. Deletions Google no longer returns cannot be reconstructed
+without persisting Calendar sync tokens and event identity state.
