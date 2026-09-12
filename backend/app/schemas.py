@@ -64,12 +64,20 @@ class AccountScoreResult(BaseModel):
     alert_fired: bool
     severity: str | None
     signals_fired: list[str]
+    # Annualized contract value weighted by composite_score — the dollar
+    # figure behind the pitch's money case, not just the abstract score.
+    revenue_at_risk: float
 
 
 class RecomputeScoringResponse(BaseModel):
     # Response for POST /score/recompute: how many accounts were scored
     # (accounts with no signal_snapshot history yet are skipped, not
-    # errored) and the per-account results.
+    # errored), the per-account results, and the portfolio-wide total —
+    # feeds the Portfolio page's "total at-risk revenue" summary bar.
+    # total_revenue_at_risk only sums accounts where alert_fired=True
+    # (a crisp "$X across the accounts we've flagged"), not every account's
+    # proportional exposure — see scoring.py's recompute_all_scores.
     accounts_scored: int
     alerts_fired: int
+    total_revenue_at_risk: float
     results: list[AccountScoreResult]

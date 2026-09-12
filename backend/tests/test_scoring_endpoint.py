@@ -65,7 +65,12 @@ def test_recompute_account_score_stable_account_does_not_fire_alert():
 
 
 def test_recompute_account_score_worsening_account_fires_alert_and_persists_it():
-    fake_client = FakeSupabaseClient({"signal_snapshot": _worsening_snapshots("acc-1")})
+    fake_client = FakeSupabaseClient(
+        {
+            "account": [{"id": "acc-1", "contract_value_monthly": 10000}],
+            "signal_snapshot": _worsening_snapshots("acc-1"),
+        }
+    )
     client = _override_client(fake_client)
     try:
         response = client.post("/score/recompute/acc-1")
@@ -78,6 +83,25 @@ def test_recompute_account_score_worsening_account_fires_alert_and_persists_it()
     assert body["severity"] is not None
     assert len(fake_client._tables["alert"]) == 1
     assert fake_client._tables["alert"][0]["account_id"] == "acc-1"
+    # composite_score should be near the top of the scale for this fixture
+    # (see test_scoring_engine.py's equivalent), so revenue_at_risk should
+    # be close to the full annualized contract value ($120,000).
+    assert body["revenue_at_risk"] > 100000
+
+
+def test_recompute_account_score_with_no_contract_value_on_record_reports_zero_risk():
+    # No "account" table entry at all for this id — fetch_contract_value
+    # falls back to 0 rather than erroring, so the score itself is still
+    # computed and returned.
+    fake_client = FakeSupabaseClient({"signal_snapshot": _stable_snapshots("acc-1")})
+    client = _override_client(fake_client)
+    try:
+        response = client.post("/score/recompute/acc-1")
+    finally:
+        app.dependency_overrides.pop(scoring._require_supabase_client, None)
+
+    assert response.status_code == 200
+    assert response.json()["revenue_at_risk"] == 0.0
 
 
 def test_recompute_account_score_twice_does_not_duplicate_alert():
@@ -111,7 +135,10 @@ def test_recompute_account_score_404_when_no_history():
 def test_recompute_all_scores_skips_accounts_without_history():
     fake_client = FakeSupabaseClient(
         {
-            "account": [{"id": "acc-1"}, {"id": "acc-2"}],
+            "account": [
+                {"id": "acc-1", "contract_value_monthly": 10000},
+                {"id": "acc-2", "contract_value_monthly": 5000},
+            ],
             "signal_snapshot": _stable_snapshots("acc-1"),  # acc-2 has none yet
         }
     )
@@ -126,6 +153,38 @@ def test_recompute_all_scores_skips_accounts_without_history():
     assert body["accounts_scored"] == 1
     assert body["alerts_fired"] == 0
     assert [r["account_id"] for r in body["results"]] == ["acc-1"]
+    # acc-1 is stable (composite_score=0) -> zero revenue at risk, and the
+    # portfolio-wide total should match the sum of the (single) result.
+    assert body["results"][0]["revenue_at_risk"] == 0.0
+    assert body["total_revenue_at_risk"] == 0.0
+
+
+def test_recompute_all_scores_totals_revenue_at_risk_across_alerting_accounts_only():
+    # acc-1 worsens (fires); acc-2 stays stable (doesn't) — the portfolio
+    # total should only reflect acc-1's exposure, not acc-2's.
+    fake_client = FakeSupabaseClient(
+        {
+            "account": [
+                {"id": "acc-1", "contract_value_monthly": 10000},
+                {"id": "acc-2", "contract_value_monthly": 8000},
+            ],
+            "signal_snapshot": _worsening_snapshots("acc-1") + _stable_snapshots("acc-2"),
+        }
+    )
+    client = _override_client(fake_client)
+    try:
+        response = client.post("/score/recompute")
+    finally:
+        app.dependency_overrides.pop(scoring._require_supabase_client, None)
+
+    assert response.status_code == 200
+    body = response.json()
+    results_by_id = {r["account_id"]: r for r in body["results"]}
+    assert results_by_id["acc-1"]["alert_fired"] is True
+    assert results_by_id["acc-2"]["alert_fired"] is False
+    assert results_by_id["acc-2"]["revenue_at_risk"] == 0.0  # stable -> composite_score 0
+    assert body["total_revenue_at_risk"] == results_by_id["acc-1"]["revenue_at_risk"]
+    assert body["total_revenue_at_risk"] > 0
 
 
 def test_recompute_without_supabase_configured_returns_503():
