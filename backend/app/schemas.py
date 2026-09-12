@@ -53,3 +53,40 @@ class GmailCalendarIngestResult(BaseModel):
     email_thread_count: int
     meetings_scheduled: int
     meetings_cancelled: int
+
+
+class AccountScoreResult(BaseModel):
+    # Response for POST /score/recompute/{account_id}, and one entry per
+    # account in POST /score/recompute's batch response.
+    account_id: str
+    composite_score: float
+    trend_slope: float
+    alert_fired: bool
+    severity: str | None
+    signals_fired: list[str]
+    # What % of composite_score each signal is responsible for, e.g.
+    # {"avg_response_time_hours": 68.2, ...} — an inspectable breakdown of
+    # the score, not just the score itself. Always present, even when no
+    # alert fired (useful for the account-detail view either way).
+    signal_contributions: dict[str, float]
+    # Annualized contract value weighted by composite_score — the dollar
+    # figure behind the pitch's money case, not just the abstract score.
+    revenue_at_risk: float
+
+
+class RecomputeScoringResponse(BaseModel):
+    # Response for POST /score/recompute: how many accounts were scored
+    # (accounts with no signal_snapshot history yet are skipped, not
+    # errored), the per-account results, and the portfolio-wide total —
+    # feeds the Portfolio page's "total at-risk revenue" summary bar.
+    # total_revenue_at_risk only sums accounts where alert_fired=True
+    # (a crisp "$X across the accounts we've flagged"), not every account's
+    # proportional exposure — see scoring.py's recompute_all_scores.
+    accounts_scored: int
+    alerts_fired: int
+    total_revenue_at_risk: float
+    results: list[AccountScoreResult]
+    # Accounts skipped because scoring raised (e.g. malformed
+    # signal_snapshot data) rather than because they had no history yet —
+    # isolated per-account so one bad account can't 500 the whole batch.
+    failed_account_ids: list[str] = []
