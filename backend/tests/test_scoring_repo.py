@@ -171,6 +171,33 @@ def test_upsert_alert_escalates_existing_alert_in_place():
     assert rows[0]["triggered_at"] == "2026-01-01T00:00:00"  # preserved: still the original trigger time
 
 
+def test_upsert_alert_refreshes_signals_fired_even_without_severity_escalation():
+    # The account is still "medium" but the underlying cause has shifted
+    # from late invoices to cancelled meetings — the alert should reflect
+    # what's *currently* driving it, not the stale original cause, even
+    # though severity itself hasn't changed.
+    client = FakeSupabaseClient(
+        {
+            "alert": [
+                {
+                    "id": "existing",
+                    "account_id": "a1",
+                    "severity": "medium",
+                    "signals_fired": ["invoice_days_late"],
+                    "status": "open",
+                    "triggered_at": "2026-01-01T00:00:00",
+                }
+            ]
+        }
+    )
+    upsert_alert(client, "a1", ["meetings_cancelled"], "medium")
+    rows = client._tables["alert"]
+    assert len(rows) == 1  # still no duplicate row
+    assert rows[0]["severity"] == "medium"  # unchanged
+    assert rows[0]["signals_fired"] == ["meetings_cancelled"]  # refreshed
+    assert rows[0]["triggered_at"] == "2026-01-01T00:00:00"  # original trigger time preserved
+
+
 def test_upsert_alert_does_not_downgrade_existing_alert():
     client = FakeSupabaseClient(
         {

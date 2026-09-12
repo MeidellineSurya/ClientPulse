@@ -101,18 +101,26 @@ def update_alert_severity(client: Client, alert_id: str, severity: str, signals_
 
 
 def upsert_alert(client: Client, account_id: str, signals_fired: list[str], severity: str) -> None:
-    """Fires a new alert, or escalates the account's existing open one in
+    """Fires a new alert, or refreshes the account's existing open one in
     place, instead of always inserting — otherwise every /score/recompute
     call on a still-worsening account would add another row and flood the
     alerts inbox with duplicates of the same underlying issue.
 
-    A steady or improved-but-still-alerting severity leaves the existing
-    alert untouched (including its original triggered_at, i.e. when this
-    was first flagged); only a genuine escalation updates it in place.
+    severity only ever escalates (never downgrades) on an existing alert —
+    triggered_at is preserved as "when this was first flagged" regardless.
+    signals_fired, however, is always refreshed to the latest evaluation:
+    an alert still open because of sustained risk should show what's
+    *currently* driving it, even if severity hasn't changed — otherwise an
+    account whose problem shifted from, say, late invoices to cancelled
+    meetings would keep showing the stale original cause.
     """
     existing = fetch_open_alert(client, account_id)
     if existing is None:
         insert_alert(client, account_id, signals_fired, severity)
         return
-    if SEVERITY_ORDER.index(severity) > SEVERITY_ORDER.index(existing["severity"]):
-        update_alert_severity(client, existing["id"], severity, signals_fired)
+
+    new_severity = (
+        severity if SEVERITY_ORDER.index(severity) > SEVERITY_ORDER.index(existing["severity"]) else existing["severity"]
+    )
+    if new_severity != existing["severity"] or signals_fired != existing.get("signals_fired"):
+        update_alert_severity(client, existing["id"], new_severity, signals_fired)
