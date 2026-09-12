@@ -53,3 +53,23 @@ class GmailCalendarIngestResult(BaseModel):
     email_thread_count: int
     meetings_scheduled: int
     meetings_cancelled: int
+
+
+class AccountScoreResult(BaseModel):
+    # Response for POST /score/recompute/{account_id}, and one entry per
+    # account in POST /score/recompute's batch response.
+    account_id: str
+    composite_score: float
+    trend_slope: float
+    alert_fired: bool
+    severity: str | None
+    signals_fired: list[str]
+
+
+class RecomputeScoringResponse(BaseModel):
+    # Response for POST /score/recompute: how many accounts were scored
+    # (accounts with no signal_snapshot history yet are skipped, not
+    # errored) and the per-account results.
+    accounts_scored: int
+    alerts_fired: int
+    results: list[AccountScoreResult]
