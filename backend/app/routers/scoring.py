@@ -2,9 +2,9 @@
 health score, and (if warranted) an alert for one or all accounts, using
 the deterministic scoring engine in app/services/scoring_engine.py.
 
-The LLM is never involved here — see HANDOFF.md §5. This endpoint only
-decides the number; a later step (Groq brief generation) explains it in
-plain language after the fact.
+The LLM is never involved in the score or alert decision — see HANDOFF.md
+§5. Once an alert fires, app/services/brief_generation.py explains it in
+plain language after the fact; it cannot change the score or the decision.
 """
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -12,12 +12,15 @@ from supabase import Client
 
 from app.db import get_supabase_client
 from app.schemas import AccountScoreResult, RecomputeScoringResponse
+from app.services.accounts_repo import fetch_account
+from app.services.brief_generation import build_alert_brief
 from app.services.scoring_engine import compute_revenue_at_risk, score_account_history
 from app.services.scoring_repo import (
     fetch_accounts_with_contract_value,
     fetch_contract_value,
     fetch_signal_history,
     insert_health_score,
+    set_alert_brief,
     upsert_alert,
     upsert_baselines,
 )
@@ -35,14 +38,16 @@ def _require_supabase_client() -> Client:
 
 
 def _score_and_persist(
-    client: Client, account_id: str, history: list[dict], contract_value_monthly: float
+    client: Client, account_id: str, history: list[dict], contract_value_monthly: float, account_name: str
 ) -> AccountScoreResult:
     result = score_account_history(history)
 
     upsert_baselines(client, account_id, result.baselines)
     insert_health_score(client, account_id, result.composite_score, result.trend_slope)
     if result.alert_fired:
-        upsert_alert(client, account_id, result.signals_fired, result.severity)
+        alert_id = upsert_alert(client, account_id, result.signals_fired, result.severity)
+        ai_brief, suggested_action = build_alert_brief(account_name, contract_value_monthly, result)
+        set_alert_brief(client, alert_id, ai_brief, suggested_action)
 
     return AccountScoreResult(
         account_id=account_id,
@@ -64,21 +69,23 @@ def recompute_account_score(
     if not history:
         raise HTTPException(status_code=404, detail=f"no signal_snapshot history for account {account_id}")
     contract_value_monthly = fetch_contract_value(client, account_id)
-    return _score_and_persist(client, account_id, history, contract_value_monthly)
+    account = fetch_account(client, account_id)
+    account_name = account["name"] if account else account_id
+    return _score_and_persist(client, account_id, history, contract_value_monthly, account_name)
 
 
 @router.post("/recompute", response_model=RecomputeScoringResponse)
 def recompute_all_scores(client: Client = Depends(_require_supabase_client)) -> RecomputeScoringResponse:
     results = []
     failed_account_ids = []
-    for account_id, contract_value_monthly in fetch_accounts_with_contract_value(client).items():
+    for account_id, (contract_value_monthly, account_name) in fetch_accounts_with_contract_value(client).items():
         try:
             history = fetch_signal_history(client, account_id)
             if not history:
                 # New account with no signal_snapshot rows yet — skip
                 # rather than fail the whole batch over one account.
                 continue
-            results.append(_score_and_persist(client, account_id, history, contract_value_monthly))
+            results.append(_score_and_persist(client, account_id, history, contract_value_monthly, account_name))
         except Exception:
             # Isolate one account's bad data (e.g. a malformed
             # signal_snapshot value) or a transient write failure so it
