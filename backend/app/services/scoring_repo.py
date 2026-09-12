@@ -12,9 +12,23 @@ from app.services.baseline_engine import TRACKED_SIGNALS
 from app.services.scoring_engine import SEVERITY_ORDER
 
 
-def fetch_all_account_ids(client: Client) -> list[str]:
-    resp = client.table("account").select("id").execute()
-    return [row["id"] for row in resp.data]
+def fetch_contract_value(client: Client, account_id: str) -> float:
+    """One account's contract_value_monthly, for the revenue-at-risk
+    calculation. Falls back to 0 if the account row is somehow missing it
+    (shouldn't happen against a real schema.sql-backed table, which
+    defaults this column to 0 and never allows null)."""
+    resp = client.table("account").select("contract_value_monthly").eq("id", account_id).execute()
+    if not resp.data:
+        return 0.0
+    return float(resp.data[0].get("contract_value_monthly", 0.0))
+
+
+def fetch_accounts_with_contract_value(client: Client) -> dict[str, float]:
+    """account_id -> contract_value_monthly for every account, so the batch
+    /score/recompute endpoint can get both the account list and each
+    account's contract value in a single query."""
+    resp = client.table("account").select("id, contract_value_monthly").execute()
+    return {row["id"]: float(row.get("contract_value_monthly", 0.0)) for row in resp.data}
 
 
 def fetch_signal_history(client: Client, account_id: str) -> list[dict]:

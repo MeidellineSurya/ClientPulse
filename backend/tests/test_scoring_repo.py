@@ -2,7 +2,8 @@
 # client — no real database needed.
 
 from app.services.scoring_repo import (
-    fetch_all_account_ids,
+    fetch_accounts_with_contract_value,
+    fetch_contract_value,
     fetch_open_alert,
     fetch_signal_history,
     insert_alert,
@@ -13,9 +14,26 @@ from app.services.scoring_repo import (
 from tests.fakes import FakeSupabaseClient
 
 
-def test_fetch_all_account_ids():
-    client = FakeSupabaseClient({"account": [{"id": "a1"}, {"id": "a2"}]})
-    assert fetch_all_account_ids(client) == ["a1", "a2"]
+def test_fetch_contract_value_returns_the_accounts_value():
+    client = FakeSupabaseClient({"account": [{"id": "a1", "contract_value_monthly": 5000}]})
+    assert fetch_contract_value(client, "a1") == 5000.0
+
+
+def test_fetch_contract_value_defaults_to_zero_when_account_missing():
+    client = FakeSupabaseClient({"account": []})
+    assert fetch_contract_value(client, "ghost") == 0.0
+
+
+def test_fetch_accounts_with_contract_value_maps_every_account():
+    client = FakeSupabaseClient(
+        {
+            "account": [
+                {"id": "a1", "contract_value_monthly": 5000},
+                {"id": "a2", "contract_value_monthly": 12000},
+            ]
+        }
+    )
+    assert fetch_accounts_with_contract_value(client) == {"a1": 5000.0, "a2": 12000.0}
 
 
 def test_fetch_signal_history_returns_oldest_period_first():
