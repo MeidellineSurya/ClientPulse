@@ -40,9 +40,19 @@ doc.
 
 - [x] Repo scaffolding (folders, README, .env.example)
 - [x] Supabase schema.sql written (not yet applied to a live Supabase project)
-- [ ] Supabase seed data loaded (StudioCo + 15 mock accounts)
-- [ ] FastAPI skeleton running (`/health` responds)
-- [ ] FastAPI endpoints stubbed (`/accounts`, `/alerts`, `/ingest/csv`)
+- [x] Supabase seed data (StudioCo + 15 mock accounts, 8-week history, 3 trending
+      worse — `backend/scripts/generate_seed.py` -> `supabase/seed.sql`; not yet
+      applied to a live Supabase project)
+- [x] FastAPI skeleton running (`/health` responds)
+- [ ] FastAPI endpoints stubbed (`/accounts`, `/alerts`, `/ingest/csv`) — `/ingest/csv`
+      done and fully wired to Supabase (parses CSV, matches account/period, writes
+      `invoice_days_late`, tested); `/accounts` and `/alerts` not started (owned by
+      other workstreams, not ingestion)
+- [ ] Gmail/Calendar pull (stretch) — `/ingest/gmail-calendar/{account_id}` scaffolded
+      end-to-end (metadata-only Gmail scope, Calendar events, DB upsert) and unit-tested
+      on the pure signal computation + repo logic, but **not exercised against a live
+      Google account** — no OAuth credentials available in this environment. Needs real
+      `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`/`GOOGLE_REFRESH_TOKEN` to actually run.
 - [ ] Groq client stub in place
 - [ ] Frontend (Vite + React) skeleton running
 - [ ] Portfolio page (hardcoded data)

@@ -9,6 +9,8 @@ from app.schemas import ParsedInvoiceRow
 
 @dataclass
 class UnmatchedRow:
+    # A parsed row build_update_plan couldn't resolve to a signal_snapshot
+    # write, plus why (surfaced back to the API caller).
     row_number: int
     account_email: str
     reason: str
@@ -30,11 +32,14 @@ def build_update_plan(
     unmatched: list[UnmatchedRow] = []
 
     for row in parsed_rows:
+        # Step 1: resolve the CSV's account_email to a seeded account_id.
         account_id = account_id_by_email.get(row.account_email)
         if account_id is None:
             unmatched.append(UnmatchedRow(row.row_number, row.account_email, "no account with this email"))
             continue
 
+        # Step 2: find which of that account's weekly periods this
+        # invoice's due_date falls into.
         snapshot_id = None
         for snap in snapshots_by_account.get(account_id, []):
             period_start = date.fromisoformat(str(snap["period_start"]))
@@ -49,6 +54,8 @@ def build_update_plan(
             )
             continue
 
+        # Step 3: record the write, keeping the worst (max) lateness if more
+        # than one invoice lands in the same period.
         updates[snapshot_id] = max(updates.get(snapshot_id, 0), row.invoice_days_late)
 
     return updates, unmatched

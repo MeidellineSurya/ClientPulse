@@ -1,48 +1,16 @@
-from types import SimpleNamespace
+# End-to-end tests for POST /ingest/csv, using a fake Supabase client (no
+# real database needed) injected via FastAPI's dependency override.
 
 from fastapi.testclient import TestClient
 
 from app.main import app
 from app.routers import ingest
-
-
-class _FakeQuery:
-    def __init__(self, rows: list[dict]):
-        self._rows = rows
-        self._payload: dict | None = None
-
-    def select(self, *_args, **_kwargs) -> "_FakeQuery":
-        return self
-
-    def in_(self, column: str, values) -> "_FakeQuery":
-        values = set(values)
-        self._rows = [r for r in self._rows if r.get(column) in values]
-        return self
-
-    def eq(self, column: str, value) -> "_FakeQuery":
-        self._rows = [r for r in self._rows if r.get(column) == value]
-        return self
-
-    def update(self, payload: dict) -> "_FakeQuery":
-        self._payload = payload
-        return self
-
-    def execute(self) -> SimpleNamespace:
-        if self._payload is not None:
-            for row in self._rows:
-                row.update(self._payload)
-        return SimpleNamespace(data=self._rows)
-
-
-class FakeSupabaseClient:
-    def __init__(self, tables: dict[str, list[dict]]):
-        self._tables = tables
-
-    def table(self, name: str) -> _FakeQuery:
-        return _FakeQuery(self._tables[name])
+from tests.fakes import FakeSupabaseClient
 
 
 def _seed_fake_client() -> FakeSupabaseClient:
+    # One account with one signal_snapshot period, mirroring the shape of
+    # real seeded data closely enough to exercise the matching logic.
     return FakeSupabaseClient(
         {
             "account": [
@@ -62,6 +30,8 @@ def _seed_fake_client() -> FakeSupabaseClient:
 
 
 def test_ingest_csv_updates_matching_snapshot():
+    # A CSV row for a known account/period should update invoice_days_late
+    # on the matching signal_snapshot row.
     fake_client = _seed_fake_client()
     app.dependency_overrides[ingest._require_supabase_client] = lambda: fake_client
     client = TestClient(app)
@@ -74,6 +44,7 @@ def test_ingest_csv_updates_matching_snapshot():
     try:
         response = client.post("/ingest/csv", files={"file": ("invoices.csv", csv_content, "text/csv")})
     finally:
+        # Always clean up the override so it doesn't leak into other tests.
         app.dependency_overrides.pop(ingest._require_supabase_client, None)
 
     assert response.status_code == 200
@@ -84,6 +55,8 @@ def test_ingest_csv_updates_matching_snapshot():
 
 
 def test_ingest_csv_reports_unmatched_account():
+    # An email that doesn't match any seeded account should be reported in
+    # `unmatched`, not silently dropped or errored.
     fake_client = _seed_fake_client()
     app.dependency_overrides[ingest._require_supabase_client] = lambda: fake_client
     client = TestClient(app)
@@ -107,6 +80,9 @@ def test_ingest_csv_reports_unmatched_account():
 
 
 def test_ingest_csv_without_supabase_configured_returns_503():
+    # With no SUPABASE_URL/SERVICE_ROLE_KEY set (the current state of this
+    # repo — no live project yet), the endpoint should fail cleanly with a
+    # 503, not crash with an unhandled 500.
     from app.db import get_supabase_client
 
     get_supabase_client.cache_clear()

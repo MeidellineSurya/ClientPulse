@@ -28,6 +28,8 @@ def compute_days_late(due_date: date, paid_date: date | None, as_of: date) -> in
 
 
 def _parse_date(value: str, field: str) -> date:
+    # Parses one ISO date field, raising a ValueError with a row-friendly
+    # message (field name + bad value) instead of a raw exception.
     value = value.strip()
     if not value:
         raise ValueError(f"{field} is required")
@@ -38,9 +40,12 @@ def _parse_date(value: str, field: str) -> date:
 
 
 def parse_invoice_csv(raw: bytes, as_of: date | None = None) -> CsvIngestResult:
+    # as_of defaults to today; overridable so callers/tests can pin the
+    # "current date" used to compute lateness for still-unpaid invoices.
     as_of = as_of or date.today()
 
     try:
+        # utf-8-sig strips a BOM if Excel/etc added one when exporting the CSV.
         text = raw.decode("utf-8-sig")
     except UnicodeDecodeError as exc:
         raise ValueError("CSV file must be UTF-8 encoded") from exc
@@ -49,6 +54,8 @@ def parse_invoice_csv(raw: bytes, as_of: date | None = None) -> CsvIngestResult:
     if reader.fieldnames is None:
         raise ValueError("CSV file has no header row")
 
+    # These two checks are structural (bad file, not a bad row) so they
+    # raise instead of being reported per-row.
     headers = {name.strip().lower() for name in reader.fieldnames}
     missing = REQUIRED_COLUMNS - headers
     if missing:
@@ -60,6 +67,8 @@ def parse_invoice_csv(raw: bytes, as_of: date | None = None) -> CsvIngestResult:
 
     for row_number, row in enumerate(reader, start=2):  # header is row 1
         rows_received += 1
+        # Normalize keys/values (trim whitespace, lowercase column names) so
+        # minor formatting differences in the uploaded CSV don't break parsing.
         normalized = {(k or "").strip().lower(): (v or "").strip() for k, v in row.items()}
         try:
             account_email = normalized.get("account_email", "")
@@ -90,6 +99,8 @@ def parse_invoice_csv(raw: bytes, as_of: date | None = None) -> CsvIngestResult:
                 )
             )
         except ValueError as exc:
+            # One bad row shouldn't fail the whole upload — record it and
+            # keep processing the rest of the file.
             errors.append(InvoiceRowError(row_number=row_number, error=str(exc)))
 
     return CsvIngestResult(

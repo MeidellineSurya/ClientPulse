@@ -1,3 +1,6 @@
+# FastAPI app entrypoint for the ingestion service. Run with:
+#   uvicorn app.main:app --port 8000
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -5,8 +8,12 @@ from app.config import settings
 from app.routers import ingest
 
 app = FastAPI(title="ClientPulse Ingestion Service")
+
+# Mount the /ingest/csv router.
 app.include_router(ingest.router)
 
+# Allow the frontend (origins from CORS_ALLOWED_ORIGINS) to call this API
+# from the browser.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -18,4 +25,5 @@ app.add_middleware(
 
 @app.get("/health")
 def health() -> dict[str, str]:
+    # Liveness check for the harness this ingestion code runs inside.
     return {"status": "ok"}
