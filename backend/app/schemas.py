@@ -113,3 +113,42 @@ class UpdateAlertStatusRequest(BaseModel):
     # alert.status CHECK constraint, so an invalid value 422s automatically
     # instead of reaching the database.
     status: Literal["open", "acknowledged", "resolved"]
+
+
+class AccountSummary(BaseModel):
+    # One row of GET /accounts — the portfolio table. composite_score/
+    # trend_slope/health_computed_at are None for an account that hasn't
+    # been scored yet (no health_score row written for it).
+    id: str
+    name: str
+    contract_value_monthly: float
+    composite_score: float | None
+    trend_slope: float | None
+    health_computed_at: datetime | None
+
+
+class SignalSnapshotOut(BaseModel):
+    # One signal_snapshot row, for chart data (GET /accounts/{id}/signals
+    # and the signal_history list on GET /accounts/{id}).
+    period_start: date
+    period_end: date
+    avg_response_time_hours: float
+    meetings_scheduled: int
+    meetings_cancelled: int
+    invoice_days_late: int
+    email_thread_count: int
+
+
+class AccountDetail(BaseModel):
+    # GET /accounts/{id}: account info + latest score + full signal history
+    # + this account's alerts, in one response.
+    id: str
+    name: str
+    contract_value_monthly: float
+    contract_start_date: date
+    primary_contact_email: str | None
+    composite_score: float | None
+    trend_slope: float | None
+    health_computed_at: datetime | None
+    signal_history: list[SignalSnapshotOut]
+    alerts: list[AlertOut]
