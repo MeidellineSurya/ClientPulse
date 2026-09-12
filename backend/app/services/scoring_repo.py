@@ -45,17 +45,22 @@ def fetch_signal_history(client: Client, account_id: str) -> list[dict]:
 def upsert_baselines(client: Client, account_id: str, baselines: dict[str, tuple[float, float | None]]) -> None:
     """Writes one baseline row per signal, replacing any existing row for
     that (account_id, signal_name) — schema.sql's unique constraint on that
-    pair is what makes this an upsert rather than a plain insert."""
-    for signal_name, (rolling_avg, rolling_stddev) in baselines.items():
-        client.table("baseline").upsert(
-            {
-                "account_id": account_id,
-                "signal_name": signal_name,
-                "rolling_avg": rolling_avg,
-                "rolling_stddev": rolling_stddev,
-            },
-            on_conflict="account_id,signal_name",
-        ).execute()
+    pair is what makes this an upsert rather than a plain insert.
+
+    Batched into a single upsert call (supabase-py accepts a list of rows)
+    instead of one round trip per signal — this runs once per account in
+    /score/recompute's batch endpoint, so 4x fewer requests adds up.
+    """
+    payload = [
+        {
+            "account_id": account_id,
+            "signal_name": signal_name,
+            "rolling_avg": rolling_avg,
+            "rolling_stddev": rolling_stddev,
+        }
+        for signal_name, (rolling_avg, rolling_stddev) in baselines.items()
+    ]
+    client.table("baseline").upsert(payload, on_conflict="account_id,signal_name").execute()
 
 
 def insert_health_score(client: Client, account_id: str, composite_score: float, trend_slope: float) -> None:

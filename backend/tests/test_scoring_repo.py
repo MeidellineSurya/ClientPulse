@@ -61,6 +61,24 @@ def test_upsert_baselines_inserts_when_no_existing_row():
     assert rows[0]["rolling_stddev"] == 1.0
 
 
+def test_upsert_baselines_writes_one_row_per_signal_in_a_single_call():
+    # Confirms the batched upsert (one network call for all signals) still
+    # produces one distinct row per signal, same as the old per-signal loop.
+    client = FakeSupabaseClient({"baseline": []})
+    upsert_baselines(
+        client,
+        "a1",
+        {
+            "avg_response_time_hours": (4.0, 1.0),
+            "meetings_cancelled": (0.5, 0.2),
+        },
+    )
+    rows = {row["signal_name"]: row for row in client._tables["baseline"]}
+    assert set(rows) == {"avg_response_time_hours", "meetings_cancelled"}
+    assert rows["avg_response_time_hours"]["rolling_avg"] == 4.0
+    assert rows["meetings_cancelled"]["rolling_avg"] == 0.5
+
+
 def test_upsert_baselines_updates_existing_row_in_place_instead_of_duplicating():
     client = FakeSupabaseClient(
         {
