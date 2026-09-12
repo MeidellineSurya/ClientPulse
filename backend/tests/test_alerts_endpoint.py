@@ -145,9 +145,15 @@ def test_set_alert_status_rejects_invalid_status_value():
     assert response.status_code == 422
 
 
-def test_alerts_endpoint_503_without_supabase_configured():
+def test_alerts_endpoint_503_without_supabase_configured(monkeypatch):
+    from app.config import settings
     from app.db import get_supabase_client
 
+    # A developer's real backend/.env (needed for live testing) would
+    # otherwise leak into this test via the module-level settings
+    # singleton, masking the "not configured" case this test exists to check.
+    monkeypatch.setattr(settings, "supabase_url", "")
+    monkeypatch.setattr(settings, "supabase_service_role_key", "")
     get_supabase_client.cache_clear()
     app.dependency_overrides.pop(require_supabase_client, None)
     client = TestClient(app)

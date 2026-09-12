@@ -216,9 +216,15 @@ def test_recompute_all_scores_isolates_a_failing_account_instead_of_aborting_the
     assert body["accounts_scored"] == 1
 
 
-def test_recompute_without_supabase_configured_returns_503():
+def test_recompute_without_supabase_configured_returns_503(monkeypatch):
+    from app.config import settings
     from app.db import get_supabase_client
 
+    # A developer's real backend/.env (needed for live testing) would
+    # otherwise leak into this test via the module-level settings
+    # singleton, masking the "not configured" case this test exists to check.
+    monkeypatch.setattr(settings, "supabase_url", "")
+    monkeypatch.setattr(settings, "supabase_service_role_key", "")
     get_supabase_client.cache_clear()
     app.dependency_overrides.pop(scoring._require_supabase_client, None)
     client = TestClient(app)

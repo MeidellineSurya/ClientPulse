@@ -79,12 +79,15 @@ def test_ingest_csv_reports_unmatched_account():
     ]
 
 
-def test_ingest_csv_without_supabase_configured_returns_503():
-    # With no SUPABASE_URL/SERVICE_ROLE_KEY set (the current state of this
-    # repo — no live project yet), the endpoint should fail cleanly with a
-    # 503, not crash with an unhandled 500.
+def test_ingest_csv_without_supabase_configured_returns_503(monkeypatch):
+    # A developer's real backend/.env (needed for live testing) would
+    # otherwise leak into this test via the module-level settings
+    # singleton, masking the "not configured" case this test exists to check.
+    from app.config import settings
     from app.db import get_supabase_client
 
+    monkeypatch.setattr(settings, "supabase_url", "")
+    monkeypatch.setattr(settings, "supabase_service_role_key", "")
     get_supabase_client.cache_clear()
     app.dependency_overrides.pop(ingest._require_supabase_client, None)
     client = TestClient(app)

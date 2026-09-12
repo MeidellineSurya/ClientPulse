@@ -17,7 +17,8 @@ class Settings(BaseSettings):
 
     backend_port: int = 8000
     # Comma-separated list of origins allowed to call this API (CORS).
-    cors_allowed_origins: str = "http://localhost:3000"
+    # 5173 is Vite's default dev port (frontend is React/Vite, not Next.js).
+    cors_allowed_origins: str = "http://localhost:5173"
 
     # Google OAuth2 (Gmail metadata + Calendar pull, stretch goal). The
     # refresh token must have been granted with metadata-only Gmail scope

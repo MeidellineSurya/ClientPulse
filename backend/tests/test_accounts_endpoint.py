@@ -192,6 +192,39 @@ def test_get_account_signals_returns_history():
     assert body[0]["period_start"] == "2026-01-01"
 
 
+def test_get_account_health_history_returns_history():
+    account_id = "11111111-1111-4111-8111-111111111111"
+    fake_client = FakeSupabaseClient(
+        {
+            "account": [{"id": account_id, "name": "Acme", "contract_value_monthly": 10000}],
+            "health_score": [
+                {"account_id": account_id, "composite_score": 20.0, "trend_slope": 1.0, "computed_at": "2026-01-01T00:00:00"},
+                {"account_id": account_id, "composite_score": 60.0, "trend_slope": 5.0, "computed_at": "2026-02-01T00:00:00"},
+            ],
+        }
+    )
+    client = _override_client(fake_client)
+    try:
+        response = client.get(f"/accounts/{account_id}/health-history")
+    finally:
+        app.dependency_overrides.pop(require_supabase_client, None)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [row["composite_score"] for row in body] == [20.0, 60.0]
+
+
+def test_get_account_health_history_404_when_account_missing():
+    fake_client = FakeSupabaseClient({"account": []})
+    client = _override_client(fake_client)
+    try:
+        response = client.get("/accounts/99999999-9999-4999-8999-999999999999/health-history")
+    finally:
+        app.dependency_overrides.pop(require_supabase_client, None)
+
+    assert response.status_code == 404
+
+
 def test_get_account_signals_404_when_account_missing():
     fake_client = FakeSupabaseClient({"account": []})
     client = _override_client(fake_client)
@@ -203,9 +236,15 @@ def test_get_account_signals_404_when_account_missing():
     assert response.status_code == 404
 
 
-def test_accounts_endpoint_503_without_supabase_configured():
+def test_accounts_endpoint_503_without_supabase_configured(monkeypatch):
+    from app.config import settings
     from app.db import get_supabase_client
 
+    # A developer's real backend/.env (needed for live testing) would
+    # otherwise leak into this test via the module-level settings
+    # singleton, masking the "not configured" case this test exists to check.
+    monkeypatch.setattr(settings, "supabase_url", "")
+    monkeypatch.setattr(settings, "supabase_service_role_key", "")
     get_supabase_client.cache_clear()
     app.dependency_overrides.pop(require_supabase_client, None)
     client = TestClient(app)

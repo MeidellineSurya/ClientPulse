@@ -115,6 +115,14 @@ class UpdateAlertStatusRequest(BaseModel):
     status: Literal["open", "acknowledged", "resolved"]
 
 
+class HealthScorePoint(BaseModel):
+    # One historical health_score row, for the account-detail page's
+    # composite-score-over-time chart.
+    composite_score: float
+    trend_slope: float
+    computed_at: datetime
+
+
 class AccountSummary(BaseModel):
     # One row of GET /accounts — the portfolio table. composite_score/
     # trend_slope/health_computed_at are None for an account that hasn't
