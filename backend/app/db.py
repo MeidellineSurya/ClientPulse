@@ -14,9 +14,7 @@ def get_supabase_client() -> Client:
     if not settings.supabase_url or not settings.supabase_service_role_key:
         # Raised as a plain RuntimeError (not an HTTPException) so this
         # module stays usable outside of FastAPI, e.g. from future scripts.
-        raise RuntimeError(
-            "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set to write to signal_snapshot"
-        )
+        raise RuntimeError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set to use the Supabase client")
     # Service role key bypasses row-level security, which the backend needs
     # in order to write to signal_snapshot on behalf of any account.
     return create_client(settings.supabase_url, settings.supabase_service_role_key)
