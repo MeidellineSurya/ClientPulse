@@ -1,10 +1,10 @@
 # Builds authenticated Gmail/Calendar API clients for the agency's
-# connected mailbox. Scaffold only — not exercised against a live Google
-# account in this environment (no OAuth credentials available here); wire
-# up real GOOGLE_* env vars (see backend/.env.example) to actually use it.
+# connected mailbox. The refresh token is exchanged eagerly so invalid,
+# revoked, or under-scoped OAuth credentials fail before ingestion begins.
 
 from functools import lru_cache
 
+from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import Resource, build
 
@@ -17,12 +17,23 @@ from app.config import settings
 # would allow reading message content, which the product explicitly rules out.
 GMAIL_METADATA_SCOPE = "https://www.googleapis.com/auth/gmail.metadata"
 CALENDAR_READONLY_SCOPE = "https://www.googleapis.com/auth/calendar.readonly"
+BODY_READING_GMAIL_SCOPES = frozenset(
+    {
+        "https://mail.google.com/",
+        "https://www.googleapis.com/auth/gmail.modify",
+        "https://www.googleapis.com/auth/gmail.readonly",
+    }
+)
 
 TOKEN_URI = "https://oauth2.googleapis.com/token"
 
 
 def _require_google_config() -> None:
-    if not (settings.google_client_id and settings.google_client_secret and settings.google_refresh_token):
+    if not (
+        settings.google_client_id
+        and settings.google_client_secret
+        and settings.google_refresh_token
+    ):
         raise RuntimeError(
             "GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and GOOGLE_REFRESH_TOKEN must be set "
             "to pull Gmail/Calendar signals"
@@ -35,7 +46,7 @@ def get_google_credentials() -> Credentials:
     # re-authenticating every call. Credentials auto-refresh their access
     # token from the refresh token as needed.
     _require_google_config()
-    return Credentials(
+    credentials = Credentials(
         token=None,
         refresh_token=settings.google_refresh_token,
         token_uri=TOKEN_URI,
@@ -43,6 +54,27 @@ def get_google_credentials() -> Credentials:
         client_secret=settings.google_client_secret,
         scopes=[GMAIL_METADATA_SCOPE, CALENDAR_READONLY_SCOPE],
     )
+    # Fail during dependency setup rather than halfway through a multi-source
+    # ingestion run. The cached credential refreshes again automatically when
+    # Google expires its short-lived access token.
+    credentials.refresh(Request())
+    required_scopes = {GMAIL_METADATA_SCOPE, CALENDAR_READONLY_SCOPE}
+    reported_scopes = credentials.granted_scopes
+    granted_scopes = (
+        set(reported_scopes) if reported_scopes is not None else required_scopes
+    )
+    if not required_scopes.issubset(granted_scopes):
+        raise RuntimeError(
+            "Google refresh token is missing the required Gmail metadata and "
+            "Calendar read-only scopes"
+        )
+    if granted_scopes & BODY_READING_GMAIL_SCOPES:
+        raise RuntimeError(
+            "Google refresh token includes a prohibited body-reading Gmail scope"
+        )
+    if granted_scopes - required_scopes:
+        raise RuntimeError("Google refresh token includes unapproved OAuth scopes")
+    return credentials
 
 
 def get_gmail_service(credentials: Credentials) -> Resource:

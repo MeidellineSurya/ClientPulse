@@ -54,11 +54,13 @@ doc.
       passing; integration-checked by scoring the real seed data into a fake client
       and reading it back through this layer. **Not yet run against a live Supabase
       project.**
-- [ ] Gmail/Calendar pull (stretch) — `/ingest/gmail-calendar/{account_id}` scaffolded
-      end-to-end (metadata-only Gmail scope, Calendar events, DB upsert) and unit-tested
-      on the pure signal computation + repo logic, but **not exercised against a live
-      Google account** — no OAuth credentials available in this environment. Needs real
-      `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`/`GOOGLE_REFRESH_TOKEN` to actually run.
+- [x] Gmail/Calendar OAuth ingestion — `/ingest/gmail-calendar/{account_id}` now
+      uses the production metadata-only Gmail and read-only Calendar APIs, eagerly
+      refreshes and scope-checks OAuth credentials, filters Gmail headers locally
+      because `gmail.metadata` forbids server-side `q`, maps Google failures cleanly,
+      validates periods/UUIDs, and tests the complete fetch → compute → Supabase
+      snapshot-write path without reading message bodies. Live-account verification
+      still needs project-specific Google and Supabase credentials.
 - [x] Groq brief provider implemented (`openai/gpt-oss-120b`, validated JSON + deterministic fallback)
 - [x] Deterministic alert trigger implemented (threshold crossing + 3-period worsening trend + episode key)
 - [ ] Frontend (Vite + React) skeleton running
