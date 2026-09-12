@@ -43,14 +43,15 @@ doc.
 - [ ] Supabase seed data loaded (StudioCo + 15 mock accounts)
 - [ ] FastAPI skeleton running (`/health` responds)
 - [ ] FastAPI endpoints stubbed (`/accounts`, `/alerts`, `/ingest/csv`)
-- [ ] Groq client stub in place
+- [x] Groq brief provider implemented (`openai/gpt-oss-120b`, validated JSON + deterministic fallback)
+- [x] Deterministic alert trigger implemented (threshold crossing + 3-period worsening trend + episode key)
 - [ ] Frontend (Vite + React) skeleton running
 - [ ] Portfolio page (hardcoded data)
 - [ ] Account detail page (hardcoded data + charts)
 - [ ] Alerts inbox page
 - [ ] Settings/connections page
 - [ ] **Scoring engine wired to real Supabase data (the core feature — see §5)**
-- [ ] LLM brief generation wired with real prompt (not stub)
+- [x] LLM brief generation implemented with real evidence-bound prompt (route/database wiring pending)
 - [ ] Frontend connected to backend (no more hardcoded arrays)
 - [ ] Live Gmail/Calendar pull (stretch goal, cut first if behind)
 - [ ] Demo run-through rehearsed end to end
@@ -62,7 +63,7 @@ doc.
 | Frontend | React (Vite) + TypeScript + React Router + Tailwind + shadcn/ui + Recharts |
 | Backend | FastAPI (Python) |
 | Database | Supabase (Postgres) |
-| LLM | Groq — `llama-3.3-70b-versatile` |
+| LLM | Groq — `openai/gpt-oss-120b` |
 | Data sources | Gmail + Google Calendar (live-capable in this environment) + CSV upload for invoices |
 | Deploy | Vercel (frontend) / Railway (backend) |
 
