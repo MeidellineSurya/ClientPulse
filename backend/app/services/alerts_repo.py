@@ -40,5 +40,10 @@ def fetch_alert(client: Client, alert_id: str) -> dict | None:
 
 
 def update_alert_status(client: Client, alert_id: str, status: str) -> dict:
+    # account_name is joined in here too (not just fetch_all_alerts) so the
+    # UI has something to render immediately after a status change instead
+    # of falling back to the raw account_id.
     resp = client.table("alert").update({"status": status}).eq("id", alert_id).execute()
-    return resp.data[0]
+    updated = resp.data[0]
+    names = _fetch_account_names(client, [updated["account_id"]])
+    return {**updated, "account_name": names.get(updated["account_id"])}

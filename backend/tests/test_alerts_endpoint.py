@@ -52,7 +52,12 @@ def test_list_alerts_sorted_newest_first_with_account_name():
 
 
 def test_set_alert_status_updates_and_returns_the_alert():
-    fake_client = FakeSupabaseClient({"alert": [_alert("alert-1", "acc-1", "2026-01-01T00:00:00", status="open")]})
+    fake_client = FakeSupabaseClient(
+        {
+            "alert": [_alert("alert-1", "acc-1", "2026-01-01T00:00:00", status="open")],
+            "account": [{"id": "acc-1", "name": "Acme"}],
+        }
+    )
     client = _override_client(fake_client)
     try:
         response = client.post("/alerts/alert-1/status", json={"status": "acknowledged"})
@@ -62,6 +67,10 @@ def test_set_alert_status_updates_and_returns_the_alert():
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "acknowledged"
+    # Regression check: the response must carry the account name, not force
+    # it to null, or the alerts inbox falls back to showing the raw UUID
+    # right after a status change.
+    assert body["account_name"] == "Acme"
     assert fake_client._tables["alert"][0]["status"] == "acknowledged"
 
 

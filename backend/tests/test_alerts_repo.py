@@ -66,7 +66,26 @@ def test_fetch_alert_returns_none_when_missing():
 
 
 def test_update_alert_status_updates_and_returns_the_row():
-    client = FakeSupabaseClient({"alert": [_alert("a1", "acc-1", "2026-01-01T00:00:00", status="open")]})
+    client = FakeSupabaseClient(
+        {
+            "alert": [_alert("a1", "acc-1", "2026-01-01T00:00:00", status="open")],
+            "account": [{"id": "acc-1", "name": "Acme"}],
+        }
+    )
     updated = update_alert_status(client, "a1", "acknowledged")
     assert updated["status"] == "acknowledged"
     assert client._tables["alert"][0]["status"] == "acknowledged"
+
+
+def test_update_alert_status_joins_account_name_so_ui_never_shows_a_raw_id():
+    # Without this, the alerts inbox falls back to displaying the raw
+    # account_id right after a status change (a real bug caught by manually
+    # exercising the "Mark Acknowledged" button against live data).
+    client = FakeSupabaseClient(
+        {
+            "alert": [_alert("a1", "acc-1", "2026-01-01T00:00:00", status="open")],
+            "account": [{"id": "acc-1", "name": "Bluepeak Media"}],
+        }
+    )
+    updated = update_alert_status(client, "a1", "acknowledged")
+    assert updated["account_name"] == "Bluepeak Media"

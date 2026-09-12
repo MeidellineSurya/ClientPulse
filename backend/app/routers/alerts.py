@@ -28,4 +28,4 @@ def set_alert_status(
     if existing is None:
         raise HTTPException(status_code=404, detail=f"alert {alert_id} not found")
     updated = update_alert_status(client, alert_id, body.status)
-    return AlertOut(**updated, account_name=None)
+    return AlertOut(**updated)
