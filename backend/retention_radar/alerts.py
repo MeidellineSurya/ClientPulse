@@ -1,4 +1,22 @@
-"""Deterministic retention-risk alert evaluation."""
+"""Deterministic retention-risk alert evaluation.
+
+SUPERSEDED — not wired into the app, kept for reference only. This module
+was built independently from app/services/scoring_engine.py, which
+implements the same core idea (threshold crossing + 3-period worsening
+trend) and is the one actually running in production: wired to
+POST /score/recompute, validated against the real seed data (flags exactly
+the 3 seeded worsening accounts), and verified end-to-end against a live
+Supabase project. This file was never run against real data and is not
+imported anywhere under app/.
+
+Notable differences if this is ever revisited: this module requires every
+consecutive period in the trend window to be strictly increasing, while
+scoring_engine.py only requires a positive overall slope (more tolerant of
+a single noisy week inside a real worsening trend); this module's dedup is
+caller-tracked episode keys, while scoring_engine.py's is a DB lookup
+against existing open alerts (a better fit for "recompute can be called
+anytime" rather than "called once per new period").
+"""
 
 from __future__ import annotations
 

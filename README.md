@@ -9,9 +9,8 @@ invoices) before the client says anything.
 > against a real Supabase project, including real Groq-generated AI briefs on
 > alerts. Production Gmail/Calendar OAuth ingestion is implemented, but
 > live-account verification still needs project-specific Google credentials.
-> **Open item:** two unreconciled implementations of the deterministic alert
-> *decision* exist (`app/services/scoring_engine.py`, live and wired vs.
-> `backend/retention_radar/alerts.py`, unwired) — see HANDOFF.md.
+> `app/services/scoring_engine.py` is confirmed as the sole alert-decision
+> engine — see HANDOFF.md.
 >
 > Pitch, scoring formula, product decisions, and demo script: see
 > [HANDOFF.md](./HANDOFF.md).

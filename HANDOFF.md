@@ -71,8 +71,8 @@ doc.
       with a real `GROQ_API_KEY` — alerts now carry genuine LLM-generated
       briefs, confirmed causal-claim-free and auto-contact-free by inspecting
       the actual text.
-- [x] Deterministic alert trigger implemented — see ⚠️ below, **two unreconciled
-      implementations exist**.
+- [x] Deterministic alert trigger implemented — `scoring_engine.py` confirmed as
+      the sole decision engine, see ✅ below.
 - [x] Frontend (Vite + React) skeleton running — on `feat/frontend-app`, merged with
       the latest `main`. TypeScript + Tailwind v4 + shadcn/ui + React Router + Recharts.
 - [x] Portfolio page — real data, sortable table, color-coded health scores, trend
@@ -105,21 +105,22 @@ doc.
       credentials available yet, Supabase side is otherwise ready)
 - [ ] Demo run-through rehearsed end to end
 
-> ⚠️ **Open item: two unreconciled implementations of the deterministic alert
-> *decision*.** `app/services/scoring_engine.py` (live, wired to `POST
-> /score/recompute`, verified end-to-end against the real Supabase project) and
-> `backend/retention_radar/alerts.py`'s `evaluate_alert` (same core idea —
-> threshold crossing + 3-period worsening trend — built independently, different
-> scale/severity buckets/dedup strategy, **still not imported anywhere in
-> `app/`**) both exist right now. The team needs to decide whether to keep only
-> one, or under what circumstances (if any) the second would ever run. Flagging
-> here rather than silently picking one — this is exactly the kind of decision
-> HANDOFF §5 says shouldn't get rushed.
+> ✅ **Resolved: the two unreconciled alert-decision implementations.**
+> `app/services/scoring_engine.py` is the one and only alert decision engine —
+> live, wired to `POST /score/recompute`, validated against the real seed data
+> (exact 3/15 separation), verified end-to-end against the live Supabase
+> project. `backend/retention_radar/alerts.py`'s `evaluate_alert` (built
+> independently, same core idea, never run against real data, stricter
+> monotonic trend requirement, caller-tracked dedup that doesn't fit a
+> "recompute anytime" call pattern) is **not** wired in and never will be —
+> its module docstring now says so explicitly, kept only for reference rather
+> than deleted outright. Same resolution as brief generation below: no third
+> implementation, the decision stayed singular.
 >
-> **Resolved:** the brief-*generation* half of this — `retention_radar
-> /briefs.py` + `groq.py` is now the one and only brief generator, wired into
-> `scoring_engine.py`'s pipeline (see the Groq brief provider item in §2). No
-> third implementation was built; the decision engine stayed singular.
+> **Also resolved: brief generation.** `retention_radar/briefs.py` + `groq.py`
+> is the one and only brief generator, wired into `scoring_engine.py`'s
+> pipeline (see the Groq brief provider item in §2). No third implementation
+> was built.
 
 ## 3. Stack (reused deliberately, nothing new to learn under time pressure)
 
