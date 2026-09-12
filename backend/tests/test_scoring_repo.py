@@ -8,6 +8,7 @@ from app.services.scoring_repo import (
     fetch_signal_history,
     insert_alert,
     insert_health_score,
+    set_alert_brief,
     upsert_alert,
     upsert_baselines,
 )
@@ -28,12 +29,15 @@ def test_fetch_accounts_with_contract_value_maps_every_account():
     client = FakeSupabaseClient(
         {
             "account": [
-                {"id": "a1", "contract_value_monthly": 5000},
-                {"id": "a2", "contract_value_monthly": 12000},
+                {"id": "a1", "name": "Acme", "contract_value_monthly": 5000},
+                {"id": "a2", "name": "Beta", "contract_value_monthly": 12000},
             ]
         }
     )
-    assert fetch_accounts_with_contract_value(client) == {"a1": 5000.0, "a2": 12000.0}
+    assert fetch_accounts_with_contract_value(client) == {
+        "a1": (5000.0, "Acme"),
+        "a2": (12000.0, "Beta"),
+    }
 
 
 def test_fetch_signal_history_returns_oldest_period_first():
@@ -102,14 +106,23 @@ def test_insert_health_score_appends_a_row():
 
 def test_insert_alert_defaults_to_open_status_with_a_triggered_at_timestamp():
     client = FakeSupabaseClient({"alert": []})
-    insert_alert(client, "a1", ["avg_response_time_hours"], "high")
+    alert_id = insert_alert(client, "a1", ["avg_response_time_hours"], "high")
     rows = client._tables["alert"]
     assert len(rows) == 1
+    assert rows[0]["id"] == alert_id  # returned id matches what was written
     assert rows[0]["account_id"] == "a1"
     assert rows[0]["signals_fired"] == ["avg_response_time_hours"]
     assert rows[0]["severity"] == "high"
     assert rows[0]["status"] == "open"
     assert rows[0]["triggered_at"]  # non-empty, set at insert time
+
+
+def test_set_alert_brief_updates_the_row():
+    client = FakeSupabaseClient({"alert": [{"id": "alert-1", "ai_brief": None, "suggested_action": None}]})
+    set_alert_brief(client, "alert-1", "Acme is trending worse.", "Schedule a check-in.")
+    row = client._tables["alert"][0]
+    assert row["ai_brief"] == "Acme is trending worse."
+    assert row["suggested_action"] == "Schedule a check-in."
 
 
 def test_fetch_open_alert_ignores_resolved_alerts():
@@ -138,9 +151,10 @@ def test_fetch_open_alert_returns_most_recently_triggered():
 
 def test_upsert_alert_inserts_when_no_open_alert_exists():
     client = FakeSupabaseClient({"alert": []})
-    upsert_alert(client, "a1", ["invoice_days_late"], "medium")
+    alert_id = upsert_alert(client, "a1", ["invoice_days_late"], "medium")
     assert len(client._tables["alert"]) == 1
     assert client._tables["alert"][0]["severity"] == "medium"
+    assert client._tables["alert"][0]["id"] == alert_id
 
 
 def test_upsert_alert_does_not_duplicate_when_severity_is_unchanged():
@@ -161,9 +175,10 @@ def test_upsert_alert_does_not_duplicate_when_severity_is_unchanged():
             ]
         }
     )
-    upsert_alert(client, "a1", ["invoice_days_late"], "medium")
+    alert_id = upsert_alert(client, "a1", ["invoice_days_late"], "medium")
     assert len(client._tables["alert"]) == 1
     assert client._tables["alert"][0]["triggered_at"] == "2026-01-01T00:00:00"  # untouched
+    assert alert_id == "existing"
 
 
 def test_upsert_alert_escalates_existing_alert_in_place():
@@ -181,12 +196,13 @@ def test_upsert_alert_escalates_existing_alert_in_place():
             ]
         }
     )
-    upsert_alert(client, "a1", ["invoice_days_late", "meetings_cancelled"], "high")
+    alert_id = upsert_alert(client, "a1", ["invoice_days_late", "meetings_cancelled"], "high")
     rows = client._tables["alert"]
     assert len(rows) == 1  # updated in place, not duplicated
     assert rows[0]["severity"] == "high"
     assert rows[0]["signals_fired"] == ["invoice_days_late", "meetings_cancelled"]
     assert rows[0]["triggered_at"] == "2026-01-01T00:00:00"  # preserved: still the original trigger time
+    assert alert_id == "existing"
 
 
 def test_upsert_alert_refreshes_signals_fired_even_without_severity_escalation():

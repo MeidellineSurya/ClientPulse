@@ -4,6 +4,7 @@ pure math in scoring_engine.py / baseline_engine.py stays testable without
 a database.
 """
 
+import uuid
 from datetime import datetime, timezone
 
 from supabase import Client
@@ -23,12 +24,12 @@ def fetch_contract_value(client: Client, account_id: str) -> float:
     return float(resp.data[0].get("contract_value_monthly", 0.0))
 
 
-def fetch_accounts_with_contract_value(client: Client) -> dict[str, float]:
-    """account_id -> contract_value_monthly for every account, so the batch
-    /score/recompute endpoint can get both the account list and each
-    account's contract value in a single query."""
-    resp = client.table("account").select("id, contract_value_monthly").execute()
-    return {row["id"]: float(row.get("contract_value_monthly", 0.0)) for row in resp.data}
+def fetch_accounts_with_contract_value(client: Client) -> dict[str, tuple[float, str]]:
+    """account_id -> (contract_value_monthly, name) for every account, so
+    the batch /score/recompute endpoint can get the account list, contract
+    value, and display name (the latter for brief generation) in one query."""
+    resp = client.table("account").select("id, name, contract_value_monthly").execute()
+    return {row["id"]: (float(row.get("contract_value_monthly", 0.0)), row["name"]) for row in resp.data}
 
 
 def fetch_signal_history(client: Client, account_id: str) -> list[dict]:
@@ -69,13 +70,15 @@ def insert_health_score(client: Client, account_id: str, composite_score: float,
     ).execute()
 
 
-def insert_alert(client: Client, account_id: str, signals_fired: list[str], severity: str) -> None:
-    # triggered_at is set explicitly (rather than left to schema.sql's
-    # column default) so it's available immediately on the row this
-    # function returns/writes — fetch_open_alert needs it to find the most
-    # recent open alert without a second round trip.
+def insert_alert(client: Client, account_id: str, signals_fired: list[str], severity: str) -> str:
+    # id and triggered_at are set explicitly (rather than left to
+    # schema.sql's column defaults) so they're available immediately to the
+    # caller without a second round trip — the brief-generation step needs
+    # the id right away to attach ai_brief/suggested_action to this row.
+    alert_id = str(uuid.uuid4())
     client.table("alert").insert(
         {
+            "id": alert_id,
             "account_id": account_id,
             "signals_fired": signals_fired,
             "severity": severity,
@@ -83,6 +86,7 @@ def insert_alert(client: Client, account_id: str, signals_fired: list[str], seve
             "triggered_at": datetime.now(timezone.utc).isoformat(),
         }
     ).execute()
+    return alert_id
 
 
 def fetch_open_alert(client: Client, account_id: str) -> dict | None:
@@ -105,11 +109,12 @@ def update_alert_severity(client: Client, alert_id: str, severity: str, signals_
     client.table("alert").update({"severity": severity, "signals_fired": signals_fired}).eq("id", alert_id).execute()
 
 
-def upsert_alert(client: Client, account_id: str, signals_fired: list[str], severity: str) -> None:
+def upsert_alert(client: Client, account_id: str, signals_fired: list[str], severity: str) -> str:
     """Fires a new alert, or refreshes the account's existing open one in
     place, instead of always inserting — otherwise every /score/recompute
     call on a still-worsening account would add another row and flood the
-    alerts inbox with duplicates of the same underlying issue.
+    alerts inbox with duplicates of the same underlying issue. Always
+    returns the alert's id, so the caller can attach a brief to it.
 
     severity only ever escalates (never downgrades) on an existing alert —
     triggered_at is preserved as "when this was first flagged" regardless.
@@ -121,11 +126,17 @@ def upsert_alert(client: Client, account_id: str, signals_fired: list[str], seve
     """
     existing = fetch_open_alert(client, account_id)
     if existing is None:
-        insert_alert(client, account_id, signals_fired, severity)
-        return
+        return insert_alert(client, account_id, signals_fired, severity)
 
     new_severity = (
         severity if SEVERITY_ORDER.index(severity) > SEVERITY_ORDER.index(existing["severity"]) else existing["severity"]
     )
     if new_severity != existing["severity"] or signals_fired != existing.get("signals_fired"):
         update_alert_severity(client, existing["id"], new_severity, signals_fired)
+    return existing["id"]
+
+
+def set_alert_brief(client: Client, alert_id: str, ai_brief: str, suggested_action: str) -> None:
+    client.table("alert").update({"ai_brief": ai_brief, "suggested_action": suggested_action}).eq(
+        "id", alert_id
+    ).execute()
