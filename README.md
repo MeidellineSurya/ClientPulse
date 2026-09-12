@@ -47,6 +47,6 @@ history). Each app also has its own `.env.example` to copy from.
 - [x] Scoring engine (`/score/recompute[/{account_id}]` — deterministic composite risk,
       revenue-at-risk, per-signal explainability breakdown, alert dedup; 74/74 tests;
       `feat/baseline-scoring-engine` — not yet run against a live Supabase project)
-- [x] Groq brief provider and deterministic alert module
+- [x] Groq client stub
 - [ ] React (Vite) skeleton
 - [ ] Frontend pages
