@@ -149,6 +149,38 @@ def test_get_account_signals_returns_history():
     assert body[0]["period_start"] == "2026-01-01"
 
 
+def test_get_account_health_history_returns_history():
+    fake_client = FakeSupabaseClient(
+        {
+            "account": [{"id": "acc-1", "name": "Acme", "contract_value_monthly": 10000}],
+            "health_score": [
+                {"account_id": "acc-1", "composite_score": 20.0, "trend_slope": 1.0, "computed_at": "2026-01-01T00:00:00"},
+                {"account_id": "acc-1", "composite_score": 60.0, "trend_slope": 5.0, "computed_at": "2026-02-01T00:00:00"},
+            ],
+        }
+    )
+    client = _override_client(fake_client)
+    try:
+        response = client.get("/accounts/acc-1/health-history")
+    finally:
+        app.dependency_overrides.pop(require_supabase_client, None)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [row["composite_score"] for row in body] == [20.0, 60.0]
+
+
+def test_get_account_health_history_404_when_account_missing():
+    fake_client = FakeSupabaseClient({"account": []})
+    client = _override_client(fake_client)
+    try:
+        response = client.get("/accounts/ghost/health-history")
+    finally:
+        app.dependency_overrides.pop(require_supabase_client, None)
+
+    assert response.status_code == 404
+
+
 def test_get_account_signals_404_when_account_missing():
     fake_client = FakeSupabaseClient({"account": []})
     client = _override_client(fake_client)

@@ -8,11 +8,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from supabase import Client
 
 from app.dependencies import require_supabase_client
-from app.schemas import AccountDetail, AccountSummary, SignalSnapshotOut
+from app.schemas import AccountDetail, AccountSummary, HealthScorePoint, SignalSnapshotOut
 from app.services.accounts_repo import (
     fetch_account,
     fetch_all_accounts,
     fetch_full_signal_history,
+    fetch_health_score_history,
     fetch_latest_health_score,
     fetch_latest_health_scores,
 )
@@ -70,3 +71,13 @@ def get_account_signals(
     if account is None:
         raise HTTPException(status_code=404, detail=f"account {account_id} not found")
     return [SignalSnapshotOut(**row) for row in fetch_full_signal_history(client, account_id)]
+
+
+@router.get("/{account_id}/health-history", response_model=list[HealthScorePoint])
+def get_account_health_history(
+    account_id: str, client: Client = Depends(require_supabase_client)
+) -> list[HealthScorePoint]:
+    account = fetch_account(client, account_id)
+    if account is None:
+        raise HTTPException(status_code=404, detail=f"account {account_id} not found")
+    return [HealthScorePoint(**row) for row in fetch_health_score_history(client, account_id)]

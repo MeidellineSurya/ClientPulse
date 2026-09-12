@@ -5,6 +5,7 @@ from app.services.accounts_repo import (
     fetch_account,
     fetch_all_accounts,
     fetch_full_signal_history,
+    fetch_health_score_history,
     fetch_latest_health_score,
     fetch_latest_health_scores,
 )
@@ -56,6 +57,20 @@ def test_fetch_latest_health_score_for_one_account():
 def test_fetch_latest_health_score_returns_none_when_never_scored():
     client = FakeSupabaseClient({"health_score": []})
     assert fetch_latest_health_score(client, "a1") is None
+
+
+def test_fetch_health_score_history_sorted_oldest_first():
+    client = FakeSupabaseClient(
+        {
+            "health_score": [
+                {"account_id": "a1", "composite_score": 60.0, "trend_slope": 5.0, "computed_at": "2026-02-01T00:00:00"},
+                {"account_id": "a1", "composite_score": 20.0, "trend_slope": 1.0, "computed_at": "2026-01-01T00:00:00"},
+                {"account_id": "a2", "composite_score": 10.0, "trend_slope": 0.0, "computed_at": "2026-01-15T00:00:00"},
+            ]
+        }
+    )
+    history = fetch_health_score_history(client, "a1")
+    assert [row["composite_score"] for row in history] == [20.0, 60.0]
 
 
 def test_fetch_full_signal_history_sorted_oldest_first():

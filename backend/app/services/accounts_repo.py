@@ -50,6 +50,20 @@ def fetch_latest_health_score(client: Client, account_id: str) -> dict | None:
     return max(resp.data, key=lambda row: row["computed_at"])
 
 
+def fetch_health_score_history(client: Client, account_id: str) -> list[dict]:
+    """Every health_score row ever computed for one account, oldest first —
+    for the account-detail page's composite-score-over-time chart. Distinct
+    from fetch_latest_health_score, which only needs the single most recent
+    row."""
+    resp = (
+        client.table("health_score")
+        .select("composite_score, trend_slope, computed_at")
+        .eq("account_id", account_id)
+        .execute()
+    )
+    return sorted(resp.data, key=lambda row: row["computed_at"])
+
+
 def fetch_full_signal_history(client: Client, account_id: str) -> list[dict]:
     """All signal_snapshot rows for one account, oldest period first —
     everything the account-detail and per-account charts endpoints need to
