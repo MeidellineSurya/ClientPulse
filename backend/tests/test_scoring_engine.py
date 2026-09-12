@@ -7,6 +7,7 @@ from app.services.scoring_engine import (
     compute_composite_risk,
     compute_drift,
     compute_revenue_at_risk,
+    compute_signal_contributions,
     compute_trend_slope,
     decide_severity,
     score_account_history,
@@ -123,6 +124,35 @@ def test_decide_severity_buckets():
     assert decide_severity(95) == "critical"
 
 
+def test_compute_signal_contributions_sums_to_roughly_a_hundred():
+    drifts = {
+        "avg_response_time_hours": 1.0,
+        "meetings_cancelled": 0.5,
+        "invoice_days_late": 0.5,
+        "meetings_scheduled": 0.0,
+    }
+    contributions = compute_signal_contributions(drifts)
+    assert round(sum(contributions.values()), 1) == 100.0
+    # avg_response_time_hours (weight 0.35, drift 1.0) contributes the most.
+    assert contributions["avg_response_time_hours"] == max(contributions.values())
+
+
+def test_compute_signal_contributions_single_dominant_signal_is_one_hundred_percent():
+    drifts = {"avg_response_time_hours": 1.0, "meetings_cancelled": 0.0, "invoice_days_late": 0.0, "meetings_scheduled": 0.0}
+    contributions = compute_signal_contributions(drifts)
+    assert contributions == {
+        "avg_response_time_hours": 100.0,
+        "meetings_cancelled": 0.0,
+        "invoice_days_late": 0.0,
+        "meetings_scheduled": 0.0,
+    }
+
+
+def test_compute_signal_contributions_all_zero_when_nothing_drifted():
+    drifts = {"avg_response_time_hours": 0.0, "meetings_cancelled": 0.0, "invoice_days_late": 0.0, "meetings_scheduled": 0.0}
+    assert all(v == 0.0 for v in compute_signal_contributions(drifts).values())
+
+
 def test_significant_signals_filters_out_noise():
     drifts = {
         "avg_response_time_hours": 0.9,
@@ -171,6 +201,7 @@ def test_score_account_history_stable_account_does_not_fire():
     assert result.composite_score == 0.0
     assert result.severity is None
     assert result.signals_fired == []
+    assert all(v == 0.0 for v in result.signal_contributions.values())
 
 
 def test_score_account_history_worsening_account_fires_alert():
@@ -180,6 +211,10 @@ def test_score_account_history_worsening_account_fires_alert():
     assert result.alert_fired is True
     assert result.severity is not None
     assert "avg_response_time_hours" in result.signals_fired
+    # avg_response_time_hours carries the heaviest weight (0.35) — should
+    # be the top (or tied-top) contributor to the score's explanation.
+    assert round(sum(result.signal_contributions.values()), 0) == 100
+    assert result.signal_contributions["avg_response_time_hours"] == max(result.signal_contributions.values())
 
 
 def test_score_account_history_handles_short_history_without_crashing():

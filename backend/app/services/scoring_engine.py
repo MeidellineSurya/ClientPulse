@@ -68,6 +68,7 @@ class AccountScoringResult:
     alert_fired: bool
     severity: str | None
     signals_fired: list[str] = field(default_factory=list)
+    signal_contributions: dict[str, float] = field(default_factory=dict)
 
 
 def compute_drift(
@@ -97,6 +98,24 @@ def compute_composite_risk(
         drifts[signal] = compute_drift(current, avg, stddev, HIGHER_IS_WORSE[signal])
     composite = sum(SIGNAL_WEIGHTS[signal] * drifts[signal] for signal in SIGNAL_WEIGHTS)
     return round(composite * 100, 2), drifts
+
+
+def compute_signal_contributions(drifts: dict[str, float]) -> dict[str, float]:
+    """What percentage (0-100) of the composite score each signal is
+    responsible for, e.g. {"avg_response_time_hours": 68.2, ...} — turns
+    "the score is 97" into "97, and 68% of that is response-time drift",
+    an inspectable breakdown rather than an opaque number (HANDOFF.md §5's
+    "not the AI figures it out" standard applies to explaining the score,
+    not just computing it).
+
+    Percentages sum to ~100 (rounding aside) whenever the composite score
+    is nonzero; all zero when nothing has drifted at all.
+    """
+    weighted = {signal: SIGNAL_WEIGHTS[signal] * drifts.get(signal, 0.0) for signal in SIGNAL_WEIGHTS}
+    total = sum(weighted.values())
+    if total <= 0:
+        return {signal: 0.0 for signal in SIGNAL_WEIGHTS}
+    return {signal: round(contribution / total * 100, 1) for signal, contribution in weighted.items()}
 
 
 def compute_revenue_at_risk(contract_value_monthly: float, composite_score: float) -> float:
@@ -189,4 +208,5 @@ def score_account_history(history: list[dict]) -> AccountScoringResult:
         alert_fired=alert_fired,
         severity=decide_severity(composite_score) if alert_fired else None,
         signals_fired=significant_signals(latest_drifts) if alert_fired else [],
+        signal_contributions=compute_signal_contributions(latest_drifts),
     )
