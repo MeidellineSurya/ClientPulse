@@ -90,7 +90,7 @@ export function Alerts() {
             </CardHeader>
             {alert.ai_brief && (
               <CardContent className="text-sm">
-                {alert.ai_brief}
+                <p className="whitespace-pre-line">{alert.ai_brief}</p>
                 {alert.suggested_action && (
                   <p className="mt-1 font-medium">Suggested action: {alert.suggested_action}</p>
                 )}
