@@ -17,7 +17,7 @@ invoices) before the client says anything.
 - **Frontend:** React (Vite), TypeScript, React Router, Tailwind CSS, shadcn/ui, Recharts
 - **Backend:** FastAPI (Python 3.11+), Pydantic
 - **Database:** Supabase (Postgres)
-- **LLM:** Groq (`openai/gpt-oss-120b`)
+- **LLM:** Groq (`llama-3.3-70b-versatile`)
 - **Deploy:** Vercel (frontend), Railway (backend)
 
 ## Monorepo layout
