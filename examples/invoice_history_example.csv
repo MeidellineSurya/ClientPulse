@@ -1,0 +1,9 @@
+invoice_number,account_email,amount_due,currency,invoice_date,due_date,paid_date
+INV-2026-1147,jamie.nguyen@anchor-ives.com,6000.00,USD,2026-08-24,2026-09-08,2026-09-08
+INV-2026-1148,sam.brooks@atlas-content-lab.com,25000.00,USD,2026-08-25,2026-09-09,2026-09-14
+INV-2026-1149,jordan.brooks@bluepeak-media.com,25000.00,USD,2026-08-23,2026-09-07,
+INV-2026-1150,riley.patel@brightline-partners.com,3000.00,USD,2026-08-26,2026-09-10,2026-09-10
+INV-2026-1151,alex.ortiz@canvas-north.com,25000.00,USD,2026-08-24,2026-09-08,2026-09-13
+INV-2026-1152,morgan.reed@cobalt-collective.com,15000.00,USD,2026-08-27,2026-09-11,2026-09-11
+INV-2026-1153,morgan.reed@common-thread-co.com,6000.00,USD,2026-08-22,2026-09-07,
+INV-2026-1154,sam.brooks@copperfield-media.com,18000.00,USD,2026-08-28,2026-09-12,2026-09-12
