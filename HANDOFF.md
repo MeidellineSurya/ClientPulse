@@ -382,3 +382,54 @@ stripping the original request path before it reached the app.
 
 No customer UUIDs, email addresses, tokens, passwords, project references, API
 keys, or OAuth credentials belong in this document or the repository.
+
+## 13. Open requirement: surface contact turnover on Account Detail
+
+**Status: not yet implemented — this is a spec, for whoever picks up
+frontend work next.** Backend/scoring side (§5.1) is done, merged, and
+verified against the live project; nothing here blocks that. Still
+outstanding even after the frontend restyle/auth work (§12) — that pass
+didn't touch this.
+
+**Why this matters:** `contact_changed` already flows through automatically
+wherever an alert is shown today — `alert.signals_fired` renders it as
+"Contact Changed" via the existing `formatSignalName` helper
+(`frontend/src/lib/format.ts`), same as any other signal, with zero
+frontend changes needed for that much (see `AccountDetail.tsx` and
+`Alerts.tsx`). But that's a bare label in a list of driver names. A judge
+or user seeing "Contact Changed" with no further detail can't verify what
+actually happened, which undercuts the explainability standard the rest of
+the score already meets (revenue-at-risk in dollars,
+`signal_contributions` as a percentage breakdown — see §5). This signal
+deserves the same treatment: show the actual fact, not just its name.
+
+**Backend prerequisite (must land first, small):** `GET /accounts/{id}`
+currently has nothing to build this from —
+`accounts_repo.SIGNAL_SNAPSHOT_COLUMNS` doesn't select
+`primary_contact_email`, and `SignalSnapshotOut` (schemas.py) has no field
+for it. Add both. Recommended (not required): also add two convenience
+fields to `AccountDetail`, computed server-side from `signal_history` so
+the frontend doesn't have to walk the array itself —
+`contact_changed_at: date | None` and `previous_contact_email: str | None`.
+
+**Frontend requirement:**
+1. On `AccountDetail.tsx`, when `contact_changed_at` is present, show a
+   visible callout near the account header — not buried in the signal
+   grid — e.g. "New point of contact as of {date}: {primary_contact_email}
+   (was {previous_contact_email})".
+2. Must not depend on an alert having fired. The underlying fact (a contact
+   changed) is true regardless of whether it crossed the alert threshold —
+   gating it on `signals_fired` would hide it on accounts where it's real
+   but didn't (yet) contribute enough to fire.
+3. No new sparkline needed. A discrete event doesn't suit the line-chart
+   treatment used for the other four continuous signals — a single static
+   callout is the more honest representation.
+4. Reuse existing style tokens/`formatSignalName` conventions — don't
+   invent a new label format just for this one signal.
+
+**Acceptance criteria:**
+- Anchor & Ives's account detail page (the seeded demo account, §5.1) shows
+  the callout, dated to its final seeded period.
+- Every other seeded account (none of which have a contact change) shows no
+  callout and no empty/placeholder UI in its place.
+- No change to how `signals_fired`/`signal_contributions` render elsewhere.
