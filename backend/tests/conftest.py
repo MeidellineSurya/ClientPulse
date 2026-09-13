@@ -2,6 +2,15 @@
 
 import pytest
 
+from app.main import app
+
+
+@pytest.fixture(autouse=True)
+def _clear_dependency_overrides():
+    """Keep FastAPI dependency overrides isolated to one test."""
+    yield
+    app.dependency_overrides.clear()
+
 
 @pytest.fixture(autouse=True)
 def _no_real_groq_calls(monkeypatch):

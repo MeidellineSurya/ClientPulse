@@ -1,15 +1,16 @@
 from datetime import UTC, datetime
 
-from app.main import app
-from app.routers import ingest
-from app.services.calendar_signals import CalendarEvent
-from app.services.gmail_signals import MessageMetadata
 from fastapi.testclient import TestClient
 from google.auth.exceptions import RefreshError, TransportError
 from googleapiclient.errors import HttpError
 from httplib2 import Response, ServerNotFoundError
 
-from tests.fakes import FakeSupabaseClient
+from app.auth import require_auth_context
+from app.main import app
+from app.routers import ingest
+from app.services.calendar_signals import CalendarEvent
+from app.services.gmail_signals import MessageMetadata
+from tests.fakes import FakeSupabaseClient, authenticated_context
 
 
 def _client_with_account() -> FakeSupabaseClient:
@@ -37,7 +38,7 @@ def test_gmail_calendar_ingestion_writes_computed_live_signals(monkeypatch):
             "invoice_days_late": 4,
         }
     )
-    app.dependency_overrides[ingest._require_supabase_client] = lambda: fake
+    app.dependency_overrides[require_auth_context] = lambda: authenticated_context(fake)
     monkeypatch.setattr(ingest, "get_google_credentials", lambda: object())
     monkeypatch.setattr(ingest, "get_gmail_service", lambda _credentials: object())
     monkeypatch.setattr(ingest, "get_calendar_service", lambda _credentials: object())
@@ -103,7 +104,7 @@ def test_gmail_calendar_ingestion_writes_computed_live_signals(monkeypatch):
 
 def test_gmail_calendar_rejects_malformed_account_id():
     fake = FakeSupabaseClient({"account": [], "signal_snapshot": []})
-    app.dependency_overrides[ingest._require_supabase_client] = lambda: fake
+    app.dependency_overrides[require_auth_context] = lambda: authenticated_context(fake)
     try:
         response = TestClient(app).post("/ingest/gmail-calendar/not-a-uuid")
     finally:
@@ -114,7 +115,7 @@ def test_gmail_calendar_rejects_malformed_account_id():
 
 def test_gmail_calendar_rejects_partial_period():
     fake = _client_with_account()
-    app.dependency_overrides[ingest._require_supabase_client] = lambda: fake
+    app.dependency_overrides[require_auth_context] = lambda: authenticated_context(fake)
     try:
         response = TestClient(app).post(
             "/ingest/gmail-calendar/11111111-1111-4111-8111-111111111111?period_start=2026-09-01"
@@ -130,7 +131,7 @@ def test_gmail_calendar_rejects_partial_period():
 
 def test_gmail_calendar_rejects_reversed_period():
     fake = _client_with_account()
-    app.dependency_overrides[ingest._require_supabase_client] = lambda: fake
+    app.dependency_overrides[require_auth_context] = lambda: authenticated_context(fake)
     try:
         response = TestClient(app).post(
             "/ingest/gmail-calendar/11111111-1111-4111-8111-111111111111"
@@ -145,7 +146,7 @@ def test_gmail_calendar_rejects_reversed_period():
 
 def test_gmail_calendar_returns_503_when_google_oauth_refresh_fails(monkeypatch):
     fake = _client_with_account()
-    app.dependency_overrides[ingest._require_supabase_client] = lambda: fake
+    app.dependency_overrides[require_auth_context] = lambda: authenticated_context(fake)
 
     def fail_credentials():
         raise RefreshError("refresh token was rejected")
@@ -167,7 +168,7 @@ def test_gmail_calendar_returns_503_when_google_oauth_refresh_fails(monkeypatch)
 
 def test_gmail_calendar_returns_503_when_google_oauth_transport_fails(monkeypatch):
     fake = _client_with_account()
-    app.dependency_overrides[ingest._require_supabase_client] = lambda: fake
+    app.dependency_overrides[require_auth_context] = lambda: authenticated_context(fake)
 
     def fail_credentials():
         raise TransportError("token endpoint unavailable")
@@ -189,7 +190,7 @@ def test_gmail_calendar_returns_503_when_google_oauth_transport_fails(monkeypatc
 
 def test_gmail_calendar_returns_502_when_google_api_request_fails(monkeypatch):
     fake = _client_with_account()
-    app.dependency_overrides[ingest._require_supabase_client] = lambda: fake
+    app.dependency_overrides[require_auth_context] = lambda: authenticated_context(fake)
     monkeypatch.setattr(ingest, "get_google_credentials", lambda: object())
     monkeypatch.setattr(ingest, "get_gmail_service", lambda _credentials: object())
     monkeypatch.setattr(ingest, "get_calendar_service", lambda _credentials: object())
@@ -212,7 +213,7 @@ def test_gmail_calendar_returns_502_when_google_api_request_fails(monkeypatch):
 
 def test_gmail_calendar_returns_502_when_google_transport_fails(monkeypatch):
     fake = _client_with_account()
-    app.dependency_overrides[ingest._require_supabase_client] = lambda: fake
+    app.dependency_overrides[require_auth_context] = lambda: authenticated_context(fake)
     monkeypatch.setattr(ingest, "get_google_credentials", lambda: object())
     monkeypatch.setattr(ingest, "get_gmail_service", lambda _credentials: object())
     monkeypatch.setattr(ingest, "get_calendar_service", lambda _credentials: object())

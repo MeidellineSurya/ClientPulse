@@ -4,8 +4,13 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.dependencies import require_supabase_client
-from app.schemas import AccountDetail, AccountSummary, HealthScorePoint, SignalSnapshotOut
+from app.auth import AuthContext, require_auth_context
+from app.schemas import (
+    AccountDetail,
+    AccountSummary,
+    HealthScorePoint,
+    SignalSnapshotOut,
+)
 from app.services.accounts_repo import (
     fetch_account,
     fetch_all_accounts,
@@ -15,17 +20,19 @@ from app.services.accounts_repo import (
     fetch_latest_health_scores,
 )
 from app.services.alerts_repo import fetch_alerts_for_account
-from supabase import Client
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
 
 
 @router.get("", response_model=list[AccountSummary])
 def list_accounts(
-    client: Client = Depends(require_supabase_client),  # noqa: B008 - FastAPI dependency
+    auth: AuthContext = Depends(require_auth_context),  # noqa: B008 - FastAPI dependency
 ) -> list[AccountSummary]:
-    accounts = fetch_all_accounts(client)
-    latest_scores = fetch_latest_health_scores(client)
+    client = auth.client
+    accounts = fetch_all_accounts(client, auth.agency_id)
+    latest_scores = fetch_latest_health_scores(
+        client, [account["id"] for account in accounts]
+    )
     return [
         AccountSummary(
             id=account["id"],
@@ -46,10 +53,11 @@ def list_accounts(
 @router.get("/{account_id}", response_model=AccountDetail)
 def get_account_detail(
     account_id: UUID,
-    client: Client = Depends(require_supabase_client),  # noqa: B008 - FastAPI dependency
+    auth: AuthContext = Depends(require_auth_context),  # noqa: B008 - FastAPI dependency
 ) -> AccountDetail:
+    client = auth.client
     account_key = str(account_id)
-    account = fetch_account(client, account_key)
+    account = fetch_account(client, account_key, auth.agency_id)
     if account is None:
         raise HTTPException(status_code=404, detail=f"account {account_key} not found")
 
@@ -74,10 +82,11 @@ def get_account_detail(
 @router.get("/{account_id}/signals", response_model=list[SignalSnapshotOut])
 def get_account_signals(
     account_id: UUID,
-    client: Client = Depends(require_supabase_client),  # noqa: B008 - FastAPI dependency
+    auth: AuthContext = Depends(require_auth_context),  # noqa: B008 - FastAPI dependency
 ) -> list[SignalSnapshotOut]:
+    client = auth.client
     account_key = str(account_id)
-    account = fetch_account(client, account_key)
+    account = fetch_account(client, account_key, auth.agency_id)
     if account is None:
         raise HTTPException(status_code=404, detail=f"account {account_key} not found")
     return [
@@ -89,10 +98,14 @@ def get_account_signals(
 @router.get("/{account_id}/health-history", response_model=list[HealthScorePoint])
 def get_account_health_history(
     account_id: UUID,
-    client: Client = Depends(require_supabase_client),  # noqa: B008 - FastAPI dependency
+    auth: AuthContext = Depends(require_auth_context),  # noqa: B008 - FastAPI dependency
 ) -> list[HealthScorePoint]:
+    client = auth.client
     account_key = str(account_id)
-    account = fetch_account(client, account_key)
+    account = fetch_account(client, account_key, auth.agency_id)
     if account is None:
         raise HTTPException(status_code=404, detail=f"account {account_key} not found")
-    return [HealthScorePoint(**row) for row in fetch_health_score_history(client, account_key)]
+    return [
+        HealthScorePoint(**row)
+        for row in fetch_health_score_history(client, account_key)
+    ]

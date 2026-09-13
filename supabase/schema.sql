@@ -13,6 +13,25 @@ create table if not exists agency (
 );
 
 -- =========================================================
+-- agency_member
+-- One Supabase Auth user belongs to exactly one agency. The backend resolves
+-- this row after validating the bearer token; request-supplied tenant IDs are
+-- never trusted.
+-- =========================================================
+create table if not exists agency_member (
+  agency_id  uuid not null references agency(id) on delete cascade,
+  user_id    uuid not null references auth.users(id) on delete cascade,
+  role       text not null default 'member',
+  created_at timestamptz not null default now(),
+
+  constraint pk_agency_member primary key (agency_id, user_id),
+  constraint uq_agency_member_user unique (user_id),
+  constraint chk_agency_member_role check (role in ('member', 'admin'))
+);
+
+create index if not exists idx_agency_member_agency_id on agency_member(agency_id);
+
+-- =========================================================
 -- account
 -- =========================================================
 create table if not exists account (
@@ -132,3 +151,14 @@ create index if not exists idx_alert_status on alert(status);
 create unique index if not exists uq_alert_one_active_per_account
   on alert(account_id)
   where status in ('open', 'acknowledged');
+
+-- The browser uses Supabase only for Auth. With no anon/authenticated policies,
+-- direct PostgREST access to application data is denied. The backend's
+-- service-role client bypasses RLS only after enforcing agency membership.
+alter table agency enable row level security;
+alter table agency_member enable row level security;
+alter table account enable row level security;
+alter table signal_snapshot enable row level security;
+alter table baseline enable row level security;
+alter table health_score enable row level security;
+alter table alert enable row level security;

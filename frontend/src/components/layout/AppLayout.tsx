@@ -1,4 +1,4 @@
-import { AlertTriangle, LayoutGrid, Settings as SettingsIcon } from "lucide-react"
+import { AlertTriangle, LayoutGrid, LogOut, Settings as SettingsIcon } from "lucide-react"
 import { NavLink, Outlet } from "react-router-dom"
 
 import {
@@ -14,7 +14,9 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar"
+import { Button } from "@/components/ui/button"
 import { TooltipProvider } from "@/components/ui/tooltip"
+import { useAuth } from "@/components/auth/auth-context"
 
 const NAV_ITEMS = [
   { to: "/", label: "Portfolio", icon: LayoutGrid, end: true },
@@ -23,6 +25,8 @@ const NAV_ITEMS = [
 ]
 
 export function AppLayout() {
+  const { email, signOut } = useAuth()
+
   return (
     <TooltipProvider>
       <SidebarProvider>
@@ -60,6 +64,18 @@ export function AppLayout() {
         <SidebarInset>
           <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
             <SidebarTrigger />
+            <span className="ml-auto hidden text-sm text-muted-foreground sm:inline">
+              {email}
+            </span>
+            <Button
+              aria-label="Sign out"
+              size="sm"
+              variant="ghost"
+              onClick={() => void signOut()}
+            >
+              <LogOut />
+              <span className="hidden sm:inline">Sign out</span>
+            </Button>
           </header>
           <main className="flex-1 overflow-auto p-6">
             <Outlet />

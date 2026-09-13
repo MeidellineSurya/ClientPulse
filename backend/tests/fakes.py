@@ -5,6 +5,9 @@
 import json
 from types import SimpleNamespace
 
+TEST_AGENCY_ID = "00000000-0000-4000-8000-000000000001"
+TEST_USER_ID = "00000000-0000-4000-8000-000000000002"
+
 
 class FakeQuery:
     def __init__(self, table: list[dict]):
@@ -45,10 +48,14 @@ class FakeQuery:
         self._insert_payload = dict(payload)
         return self
 
-    def upsert(self, payload: dict | list[dict], on_conflict: str | None = None) -> "FakeQuery":
+    def upsert(
+        self, payload: dict | list[dict], on_conflict: str | None = None
+    ) -> "FakeQuery":
         # supabase-py accepts either a single row or a list of rows here;
         # normalize to a list so execute() only has one code path.
-        self._upsert_payloads = [dict(p) for p in payload] if isinstance(payload, list) else [dict(payload)]
+        self._upsert_payloads = (
+            [dict(p) for p in payload] if isinstance(payload, list) else [dict(payload)]
+        )
         self._on_conflict = on_conflict
         return self
 
@@ -57,14 +64,20 @@ class FakeQuery:
             # Mimics ON CONFLICT (on_conflict) DO UPDATE: match each row
             # against the unfiltered table by the conflict columns, update
             # in place if found, otherwise insert a new row.
-            conflict_columns = [c.strip() for c in (self._on_conflict or "").split(",") if c.strip()]
+            conflict_columns = [
+                c.strip() for c in (self._on_conflict or "").split(",") if c.strip()
+            ]
             written = []
             for upsert_payload in self._upsert_payloads:
                 existing = next(
                     (
                         row
                         for row in self._table
-                        if conflict_columns and all(row.get(c) == upsert_payload.get(c) for c in conflict_columns)
+                        if conflict_columns
+                        and all(
+                            row.get(c) == upsert_payload.get(c)
+                            for c in conflict_columns
+                        )
                     ),
                     None,
                 )
@@ -89,8 +102,44 @@ class FakeQuery:
 class FakeSupabaseClient:
     def __init__(self, tables: dict[str, list[dict]]):
         self._tables = tables
+        self.auth = SimpleNamespace()
+
+        # Real rows are protected by account -> agency foreign keys. Most
+        # pre-auth tests intentionally omit that boilerplate, so normalize
+        # their fixtures into one explicit test tenant instead of weakening
+        # production repository filters.
+        accounts = self._tables.setdefault("account", [])
+        for account in accounts:
+            account.setdefault("agency_id", TEST_AGENCY_ID)
+        known_account_ids = {account["id"] for account in accounts}
+        referenced_ids = {
+            row["account_id"]
+            for table_name in ("signal_snapshot", "alert")
+            for row in self._tables.get(table_name, [])
+            if row.get("account_id")
+        }
+        for account_id in sorted(referenced_ids - known_account_ids):
+            accounts.append(
+                {
+                    "id": account_id,
+                    "agency_id": TEST_AGENCY_ID,
+                    "name": account_id,
+                    "contract_value_monthly": 0,
+                }
+            )
 
     def table(self, name: str) -> FakeQuery:
         # setdefault so tests don't need to pre-declare every table they
         # don't care about (e.g. scoring tests that never touch `account`).
         return FakeQuery(self._tables.setdefault(name, []))
+
+
+def authenticated_context(client: FakeSupabaseClient):
+    """Return the default authenticated principal for endpoint unit tests."""
+    from app.auth import AuthContext
+
+    return AuthContext(
+        client=client,
+        user_id=TEST_USER_ID,
+        agency_id=TEST_AGENCY_ID,
+    )

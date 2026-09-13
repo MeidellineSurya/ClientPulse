@@ -30,18 +30,33 @@ def fetch_contract_value(client: Client, account_id: str) -> float:
     calculation. Falls back to 0 if the account row is somehow missing it
     (shouldn't happen against a real schema.sql-backed table, which
     defaults this column to 0 and never allows null)."""
-    resp = client.table("account").select("contract_value_monthly").eq("id", account_id).execute()
+    resp = (
+        client.table("account")
+        .select("contract_value_monthly")
+        .eq("id", account_id)
+        .execute()
+    )
     if not resp.data:
         return 0.0
     return float(resp.data[0].get("contract_value_monthly", 0.0))
 
 
-def fetch_accounts_with_contract_value(client: Client) -> dict[str, tuple[float, str]]:
-    """account_id -> (contract_value_monthly, name) for every account, so
+def fetch_accounts_with_contract_value(
+    client: Client, agency_id: str
+) -> dict[str, tuple[float, str]]:
+    """account_id -> (contract_value_monthly, name) for one agency, so
     the batch /score/recompute endpoint can get the account list, contract
     value, and display name (the latter for brief generation) in one query."""
-    resp = client.table("account").select("id, name, contract_value_monthly").execute()
-    return {row["id"]: (float(row.get("contract_value_monthly", 0.0)), row["name"]) for row in resp.data}
+    resp = (
+        client.table("account")
+        .select("id, name, contract_value_monthly")
+        .eq("agency_id", agency_id)
+        .execute()
+    )
+    return {
+        row["id"]: (float(row.get("contract_value_monthly", 0.0)), row["name"])
+        for row in resp.data
+    }
 
 
 def fetch_signal_history(client: Client, account_id: str) -> list[dict]:
@@ -55,7 +70,9 @@ def fetch_signal_history(client: Client, account_id: str) -> list[dict]:
     return sorted(resp.data, key=lambda row: row["period_start"])
 
 
-def upsert_baselines(client: Client, account_id: str, baselines: dict[str, tuple[float, float | None]]) -> None:
+def upsert_baselines(
+    client: Client, account_id: str, baselines: dict[str, tuple[float, float | None]]
+) -> None:
     """Writes one baseline row per signal, replacing any existing row for
     that (account_id, signal_name) — schema.sql's unique constraint on that
     pair is what makes this an upsert rather than a plain insert.
@@ -73,12 +90,20 @@ def upsert_baselines(client: Client, account_id: str, baselines: dict[str, tuple
         }
         for signal_name, (rolling_avg, rolling_stddev) in baselines.items()
     ]
-    client.table("baseline").upsert(payload, on_conflict="account_id,signal_name").execute()
+    client.table("baseline").upsert(
+        payload, on_conflict="account_id,signal_name"
+    ).execute()
 
 
-def insert_health_score(client: Client, account_id: str, composite_score: float, trend_slope: float) -> None:
+def insert_health_score(
+    client: Client, account_id: str, composite_score: float, trend_slope: float
+) -> None:
     client.table("health_score").insert(
-        {"account_id": account_id, "composite_score": composite_score, "trend_slope": trend_slope}
+        {
+            "account_id": account_id,
+            "composite_score": composite_score,
+            "trend_slope": trend_slope,
+        }
     ).execute()
 
 
@@ -112,7 +137,9 @@ def insert_alert(
         ).execute()
     except APIError as exc:
         if exc.code == "23505":
-            raise StaleAlertWriteError("another recompute created an active alert first") from exc
+            raise StaleAlertWriteError(
+                "another recompute created an active alert first"
+            ) from exc
         raise
     return alert_id
 
@@ -204,7 +231,9 @@ def upsert_alert(
         )
 
     new_severity = (
-        severity if SEVERITY_ORDER.index(severity) > SEVERITY_ORDER.index(existing["severity"]) else existing["severity"]
+        severity
+        if SEVERITY_ORDER.index(severity) > SEVERITY_ORDER.index(existing["severity"])
+        else existing["severity"]
     )
     if (
         new_severity != existing["severity"]
@@ -212,5 +241,7 @@ def upsert_alert(
         or ai_brief != existing.get("ai_brief")
         or suggested_action != existing.get("suggested_action")
     ):
-        update_alert_evidence(client, existing, new_severity, signals_fired, ai_brief, suggested_action)
+        update_alert_evidence(
+            client, existing, new_severity, signals_fired, ai_brief, suggested_action
+        )
     return existing["id"]

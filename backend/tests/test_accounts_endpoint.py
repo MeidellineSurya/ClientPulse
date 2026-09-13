@@ -2,15 +2,19 @@
 # using a fake Supabase client (no real database needed) injected via
 # FastAPI's dependency override.
 
-from app.dependencies import require_supabase_client
-from app.main import app
 from fastapi.testclient import TestClient
 
-from tests.fakes import FakeSupabaseClient
+from app.auth import require_auth_context
+from app.dependencies import require_supabase_client
+from app.main import app
+from tests.fakes import FakeSupabaseClient, authenticated_context
 
 
 def _override_client(fake_client: FakeSupabaseClient) -> TestClient:
     app.dependency_overrides[require_supabase_client] = lambda: fake_client
+    app.dependency_overrides[require_auth_context] = lambda: authenticated_context(
+        fake_client
+    )
     return TestClient(app)
 
 
@@ -196,10 +200,22 @@ def test_get_account_health_history_returns_history():
     account_id = "11111111-1111-4111-8111-111111111111"
     fake_client = FakeSupabaseClient(
         {
-            "account": [{"id": account_id, "name": "Acme", "contract_value_monthly": 10000}],
+            "account": [
+                {"id": account_id, "name": "Acme", "contract_value_monthly": 10000}
+            ],
             "health_score": [
-                {"account_id": account_id, "composite_score": 20.0, "trend_slope": 1.0, "computed_at": "2026-01-01T00:00:00"},
-                {"account_id": account_id, "composite_score": 60.0, "trend_slope": 5.0, "computed_at": "2026-02-01T00:00:00"},
+                {
+                    "account_id": account_id,
+                    "composite_score": 20.0,
+                    "trend_slope": 1.0,
+                    "computed_at": "2026-01-01T00:00:00",
+                },
+                {
+                    "account_id": account_id,
+                    "composite_score": 60.0,
+                    "trend_slope": 5.0,
+                    "computed_at": "2026-02-01T00:00:00",
+                },
             ],
         }
     )
@@ -218,7 +234,9 @@ def test_get_account_health_history_404_when_account_missing():
     fake_client = FakeSupabaseClient({"account": []})
     client = _override_client(fake_client)
     try:
-        response = client.get("/accounts/99999999-9999-4999-8999-999999999999/health-history")
+        response = client.get(
+            "/accounts/99999999-9999-4999-8999-999999999999/health-history"
+        )
     finally:
         app.dependency_overrides.pop(require_supabase_client, None)
 

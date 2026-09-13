@@ -3,10 +3,11 @@
 from fastapi.testclient import TestClient
 from postgrest.exceptions import APIError
 
+from app.auth import require_auth_context
 from app.main import app
 from app.routers import scoring
 from app.services.scoring_engine import AccountScoringResult
-from tests.fakes import FakeQuery, FakeSupabaseClient
+from tests.fakes import FakeQuery, FakeSupabaseClient, authenticated_context
 
 
 def _snapshot(account_id: str, period_start: str, **overrides) -> dict:
@@ -68,11 +69,13 @@ def _tables(alerts: list[dict] | None = None) -> dict[str, list[dict]]:
 
 
 def _post(client: FakeSupabaseClient):
-    app.dependency_overrides[scoring._require_supabase_client] = lambda: client
+    app.dependency_overrides[require_auth_context] = lambda: authenticated_context(
+        client
+    )
     try:
         return TestClient(app).post("/score/recompute/acc-1")
     finally:
-        app.dependency_overrides.pop(scoring._require_supabase_client, None)
+        app.dependency_overrides.pop(require_auth_context, None)
 
 
 class _RejectAlertUpdateQuery(FakeQuery):

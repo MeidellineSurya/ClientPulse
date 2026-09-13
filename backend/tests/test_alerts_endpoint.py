@@ -2,15 +2,19 @@
 # fake Supabase client (no real database needed) injected via FastAPI's
 # dependency override.
 
-from app.dependencies import require_supabase_client
-from app.main import app
 from fastapi.testclient import TestClient
 
-from tests.fakes import FakeSupabaseClient
+from app.auth import require_auth_context
+from app.dependencies import require_supabase_client
+from app.main import app
+from tests.fakes import FakeSupabaseClient, authenticated_context
 
 
 def _override_client(fake_client: FakeSupabaseClient) -> TestClient:
     app.dependency_overrides[require_supabase_client] = lambda: fake_client
+    app.dependency_overrides[require_auth_context] = lambda: authenticated_context(
+        fake_client
+    )
     return TestClient(app)
 
 

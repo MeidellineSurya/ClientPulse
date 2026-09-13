@@ -12,22 +12,37 @@ SIGNAL_SNAPSHOT_COLUMNS = (
 )
 
 
-def fetch_all_accounts(client: Client) -> list[dict]:
-    resp = client.table("account").select("*").execute()
+def fetch_all_accounts(client: Client, agency_id: str) -> list[dict]:
+    resp = client.table("account").select("*").eq("agency_id", agency_id).execute()
     return resp.data
 
 
-def fetch_account(client: Client, account_id: str) -> dict | None:
-    resp = client.table("account").select("*").eq("id", account_id).execute()
+def fetch_account(client: Client, account_id: str, agency_id: str) -> dict | None:
+    resp = (
+        client.table("account")
+        .select("*")
+        .eq("id", account_id)
+        .eq("agency_id", agency_id)
+        .execute()
+    )
     return resp.data[0] if resp.data else None
 
 
-def fetch_latest_health_scores(client: Client) -> dict[str, dict]:
+def fetch_latest_health_scores(
+    client: Client, account_ids: list[str]
+) -> dict[str, dict]:
     """account_id -> its most recent health_score row, across every
     account. Used by the account list endpoint; Postgres has no
     "latest per group" in a single postgrest call, so this fetches
     everything and reduces in Python (fine at hackathon scale)."""
-    resp = client.table("health_score").select("account_id, composite_score, trend_slope, computed_at").execute()
+    if not account_ids:
+        return {}
+    resp = (
+        client.table("health_score")
+        .select("account_id, composite_score, trend_slope, computed_at")
+        .in_("account_id", account_ids)
+        .execute()
+    )
     latest: dict[str, dict] = {}
     for row in resp.data:
         current = latest.get(row["account_id"])

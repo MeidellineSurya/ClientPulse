@@ -43,7 +43,9 @@ clientpulse/
 ## Running locally
 
 1. **Database:** create a Supabase project, then run `supabase/schema.sql`
-   followed by `supabase/seed.sql` in its SQL Editor.
+   followed by `supabase/seed.sql` in its SQL Editor. Create a user under
+   Supabase Authentication, then insert that user's UUID and the seeded agency
+   UUID into `agency_member`. Each user belongs to exactly one agency.
 2. **Backend:**
    ```
    cd backend
@@ -54,13 +56,14 @@ clientpulse/
 3. **Frontend:**
    ```
    cd frontend
-   cp .env.example .env.local   # VITE_API_BASE_URL=http://localhost:8000
+   cp .env.example .env.local   # API URL + public Supabase URL/anon key
    npm install
    npm run dev   # http://localhost:5173
    ```
-4. Once both are running, hit `POST http://localhost:8000/score/recompute`
-   once to populate `health_score`/`alert` rows before loading the frontend —
-   otherwise the Portfolio page will show accounts with no score yet.
+4. Sign in through the frontend. Protected API calls require the resulting
+   Supabase access token as `Authorization: Bearer <token>`. Run
+   `POST http://localhost:8000/score/recompute` with that header once to
+   populate `health_score`/`alert` rows before loading the portfolio.
 
 `SUPABASE_URL` must be the project's base URL only (e.g.
 `https://xxxx.supabase.co`) — not the REST API path. Pasting the REST
@@ -98,4 +101,8 @@ and falls back rather than crashing.
 - [x] Deployment — frontend live on Render, backend live on Vercel (Python
       ASGI serverless), both verified end-to-end in a real browser session
       against the actual production URLs
+- [x] Supabase Auth bearer validation and backend-enforced agency isolation,
+      including tenant-scoped accounts, signals, alerts, ingestion, and scoring
+- [ ] Deploy auth migration, create the production agency membership, and add
+      the frontend's public Supabase Auth environment values
 - [ ] Demo run-through rehearsed end to end

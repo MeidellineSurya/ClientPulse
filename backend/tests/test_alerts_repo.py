@@ -7,8 +7,7 @@ from app.services.alerts_repo import (
     fetch_all_alerts,
     update_alert_status_if_current,
 )
-
-from tests.fakes import FakeSupabaseClient
+from tests.fakes import TEST_AGENCY_ID, FakeSupabaseClient
 
 
 def _alert(alert_id, account_id, triggered_at, **overrides):
@@ -36,7 +35,7 @@ def test_fetch_all_alerts_sorted_newest_first_with_account_name_joined():
             "account": [{"id": "a1", "name": "Acme"}, {"id": "a2", "name": "Beta"}],
         }
     )
-    alerts = fetch_all_alerts(client)
+    alerts = fetch_all_alerts(client, TEST_AGENCY_ID)
     assert [a["id"] for a in alerts] == ["newer", "older"]
     assert alerts[0]["account_name"] == "Beta"
     assert alerts[1]["account_name"] == "Acme"
@@ -60,12 +59,12 @@ def test_fetch_alert_returns_the_matching_row():
     client = FakeSupabaseClient(
         {"alert": [_alert("a1", "acc-1", "2026-01-01T00:00:00")]}
     )
-    assert fetch_alert(client, "a1")["account_id"] == "acc-1"
+    assert fetch_alert(client, "a1", TEST_AGENCY_ID)["account_id"] == "acc-1"
 
 
 def test_fetch_alert_returns_none_when_missing():
     client = FakeSupabaseClient({"alert": []})
-    assert fetch_alert(client, "ghost") is None
+    assert fetch_alert(client, "ghost", TEST_AGENCY_ID) is None
 
 
 def test_conditional_alert_status_update_rejects_stale_state():
@@ -76,12 +75,14 @@ def test_conditional_alert_status_update_rejects_stale_state():
     updated = update_alert_status_if_current(
         client,
         "a1",
+        account_id="acc-1",
         current_status="open",
         new_status="acknowledged",
     )
     stale_update = update_alert_status_if_current(
         client,
         "a1",
+        account_id="acc-1",
         current_status="open",
         new_status="resolved",
     )

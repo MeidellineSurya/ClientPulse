@@ -4,7 +4,9 @@ invoice data to the right account and weekly period."""
 from supabase import Client
 
 
-def fetch_account_ids_by_email(client: Client, emails: list[str]) -> dict[str, str]:
+def fetch_account_ids_by_email(
+    client: Client, emails: list[str], agency_id: str
+) -> dict[str, str]:
     # Looks up which of the given emails match a seeded account's
     # primary_contact_email, returning email -> account_id for matches only.
     if not emails:
@@ -12,13 +14,16 @@ def fetch_account_ids_by_email(client: Client, emails: list[str]) -> dict[str, s
     resp = (
         client.table("account")
         .select("id, primary_contact_email")
+        .eq("agency_id", agency_id)
         .in_("primary_contact_email", emails)
         .execute()
     )
     return {row["primary_contact_email"]: row["id"] for row in resp.data}
 
 
-def fetch_snapshots_by_account(client: Client, account_ids: list[str]) -> dict[str, list[dict]]:
+def fetch_snapshots_by_account(
+    client: Client, account_ids: list[str]
+) -> dict[str, list[dict]]:
     # Fetches all signal_snapshot periods for the given accounts, grouped by
     # account_id, so csv_wiring can find which period a due_date falls in.
     if not account_ids:
@@ -42,13 +47,21 @@ def update_invoice_days_late(client: Client, snapshot_id: str, days_late: int) -
     ).execute()
 
 
-def fetch_account_email(client: Client, account_id: str) -> str | None:
+def fetch_account_email(client: Client, account_id: str, agency_id: str) -> str | None:
     # Looks up one account's primary_contact_email, used to query Gmail/Calendar.
-    resp = client.table("account").select("primary_contact_email").eq("id", account_id).execute()
+    resp = (
+        client.table("account")
+        .select("primary_contact_email")
+        .eq("id", account_id)
+        .eq("agency_id", agency_id)
+        .execute()
+    )
     return resp.data[0]["primary_contact_email"] if resp.data else None
 
 
-def find_snapshot_for_period(client: Client, account_id: str, period_start: str, period_end: str) -> str | None:
+def find_snapshot_for_period(
+    client: Client, account_id: str, period_start: str, period_end: str
+) -> str | None:
     resp = (
         client.table("signal_snapshot")
         .select("id")
@@ -87,5 +100,10 @@ def upsert_gmail_calendar_signals(
         client.table("signal_snapshot").update(payload).eq("id", snapshot_id).execute()
     else:
         client.table("signal_snapshot").insert(
-            {**payload, "account_id": account_id, "period_start": period_start, "period_end": period_end}
+            {
+                **payload,
+                "account_id": account_id,
+                "period_start": period_start,
+                "period_end": period_end,
+            }
         ).execute()

@@ -11,22 +11,38 @@ from supabase import Client
 ALERT_COLUMNS = "id, account_id, triggered_at, signals_fired, severity, ai_brief, suggested_action, status"
 
 
-def _fetch_account_names(client: Client, account_ids: list[str]) -> dict[str, str]:
+def _fetch_account_names(
+    client: Client, account_ids: list[str], agency_id: str
+) -> dict[str, str]:
     if not account_ids:
         return {}
-    resp = client.table("account").select("id, name").in_("id", account_ids).execute()
+    resp = (
+        client.table("account")
+        .select("id, name")
+        .eq("agency_id", agency_id)
+        .in_("id", account_ids)
+        .execute()
+    )
     return {row["id"]: row["name"] for row in resp.data}
 
 
-def fetch_all_alerts(client: Client, status: str | None = None) -> list[dict]:
-    """Every alert across every account, newest triggered_at first, each
+def fetch_all_alerts(
+    client: Client, agency_id: str, status: str | None = None
+) -> list[dict]:
+    """Every alert for one agency, newest triggered_at first, each
     with the account's name attached for display."""
-    query = client.table("alert").select(ALERT_COLUMNS)
+    accounts = (
+        client.table("account").select("id").eq("agency_id", agency_id).execute().data
+    )
+    account_ids = [account["id"] for account in accounts]
+    if not account_ids:
+        return []
+    query = client.table("alert").select(ALERT_COLUMNS).in_("account_id", account_ids)
     if status is not None:
         query = query.eq("status", status)
     resp = query.execute()
     alerts = sorted(resp.data, key=lambda row: row["triggered_at"], reverse=True)
-    names = _fetch_account_names(client, [a["account_id"] for a in alerts])
+    names = _fetch_account_names(client, [a["account_id"] for a in alerts], agency_id)
     return [
         {**alert, "account_name": names.get(alert["account_id"])} for alert in alerts
     ]
@@ -44,8 +60,20 @@ def fetch_alerts_for_account(client: Client, account_id: str) -> list[dict]:
     return sorted(resp.data, key=lambda row: row["triggered_at"], reverse=True)
 
 
-def fetch_alert(client: Client, alert_id: str) -> dict | None:
-    resp = client.table("alert").select(ALERT_COLUMNS).eq("id", alert_id).execute()
+def fetch_alert(client: Client, alert_id: str, agency_id: str) -> dict | None:
+    account_rows = (
+        client.table("account").select("id").eq("agency_id", agency_id).execute().data
+    )
+    account_ids = [row["id"] for row in account_rows]
+    if not account_ids:
+        return None
+    resp = (
+        client.table("alert")
+        .select(ALERT_COLUMNS)
+        .eq("id", alert_id)
+        .in_("account_id", account_ids)
+        .execute()
+    )
     return resp.data[0] if resp.data else None
 
 
@@ -53,6 +81,7 @@ def update_alert_status_if_current(
     client: Client,
     alert_id: str,
     *,
+    account_id: str,
     current_status: str,
     new_status: str,
 ) -> dict | None:
@@ -61,6 +90,7 @@ def update_alert_status_if_current(
         client.table("alert")
         .update({"status": new_status})
         .eq("id", alert_id)
+        .eq("account_id", account_id)
         .eq("status", current_status)
         .execute()
     )

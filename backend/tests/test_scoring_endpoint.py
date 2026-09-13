@@ -4,9 +4,9 @@
 
 from fastapi.testclient import TestClient
 
+from app.auth import require_auth_context
 from app.main import app
-from app.routers import scoring
-from tests.fakes import FakeSupabaseClient
+from tests.fakes import FakeSupabaseClient, authenticated_context
 
 
 def _snapshot(account_id: str, period_start: str, **overrides) -> dict:
@@ -44,7 +44,9 @@ def _worsening_snapshots(account_id: str) -> list[dict]:
 
 
 def _override_client(fake_client: FakeSupabaseClient) -> TestClient:
-    app.dependency_overrides[scoring._require_supabase_client] = lambda: fake_client
+    app.dependency_overrides[require_auth_context] = lambda: authenticated_context(
+        fake_client
+    )
     return TestClient(app)
 
 
@@ -54,7 +56,7 @@ def test_recompute_account_score_stable_account_does_not_fire_alert():
     try:
         response = client.post("/score/recompute/acc-1")
     finally:
-        app.dependency_overrides.pop(scoring._require_supabase_client, None)
+        app.dependency_overrides.pop(require_auth_context, None)
 
     assert response.status_code == 200
     body = response.json()
@@ -67,7 +69,9 @@ def test_recompute_account_score_stable_account_does_not_fire_alert():
 def test_recompute_account_score_worsening_account_fires_alert_and_persists_it():
     fake_client = FakeSupabaseClient(
         {
-            "account": [{"id": "acc-1", "name": "Acme", "contract_value_monthly": 10000}],
+            "account": [
+                {"id": "acc-1", "name": "Acme", "contract_value_monthly": 10000}
+            ],
             "signal_snapshot": _worsening_snapshots("acc-1"),
         }
     )
@@ -75,7 +79,7 @@ def test_recompute_account_score_worsening_account_fires_alert_and_persists_it()
     try:
         response = client.post("/score/recompute/acc-1")
     finally:
-        app.dependency_overrides.pop(scoring._require_supabase_client, None)
+        app.dependency_overrides.pop(require_auth_context, None)
 
     assert response.status_code == 200
     body = response.json()
@@ -99,7 +103,7 @@ def test_recompute_account_score_with_no_contract_value_on_record_reports_zero_r
     try:
         response = client.post("/score/recompute/acc-1")
     finally:
-        app.dependency_overrides.pop(scoring._require_supabase_client, None)
+        app.dependency_overrides.pop(require_auth_context, None)
 
     assert response.status_code == 200
     assert response.json()["revenue_at_risk"] == 0.0
@@ -115,7 +119,7 @@ def test_recompute_account_score_twice_does_not_duplicate_alert():
         first = client.post("/score/recompute/acc-1")
         second = client.post("/score/recompute/acc-1")
     finally:
-        app.dependency_overrides.pop(scoring._require_supabase_client, None)
+        app.dependency_overrides.pop(require_auth_context, None)
 
     assert first.status_code == 200
     assert second.status_code == 200
@@ -128,7 +132,7 @@ def test_recompute_account_score_404_when_no_history():
     try:
         response = client.post("/score/recompute/ghost")
     finally:
-        app.dependency_overrides.pop(scoring._require_supabase_client, None)
+        app.dependency_overrides.pop(require_auth_context, None)
 
     assert response.status_code == 404
 
@@ -147,7 +151,7 @@ def test_recompute_all_scores_skips_accounts_without_history():
     try:
         response = client.post("/score/recompute")
     finally:
-        app.dependency_overrides.pop(scoring._require_supabase_client, None)
+        app.dependency_overrides.pop(require_auth_context, None)
 
     assert response.status_code == 200
     body = response.json()
@@ -169,21 +173,24 @@ def test_recompute_all_scores_totals_revenue_at_risk_across_alerting_accounts_on
                 {"id": "acc-1", "name": "Acme", "contract_value_monthly": 10000},
                 {"id": "acc-2", "name": "Beta", "contract_value_monthly": 8000},
             ],
-            "signal_snapshot": _worsening_snapshots("acc-1") + _stable_snapshots("acc-2"),
+            "signal_snapshot": _worsening_snapshots("acc-1")
+            + _stable_snapshots("acc-2"),
         }
     )
     client = _override_client(fake_client)
     try:
         response = client.post("/score/recompute")
     finally:
-        app.dependency_overrides.pop(scoring._require_supabase_client, None)
+        app.dependency_overrides.pop(require_auth_context, None)
 
     assert response.status_code == 200
     body = response.json()
     results_by_id = {r["account_id"]: r for r in body["results"]}
     assert results_by_id["acc-1"]["alert_fired"] is True
     assert results_by_id["acc-2"]["alert_fired"] is False
-    assert results_by_id["acc-2"]["revenue_at_risk"] == 0.0  # stable -> composite_score 0
+    assert (
+        results_by_id["acc-2"]["revenue_at_risk"] == 0.0
+    )  # stable -> composite_score 0
     assert body["total_revenue_at_risk"] == results_by_id["acc-1"]["revenue_at_risk"]
     assert body["total_revenue_at_risk"] > 0
 
@@ -198,7 +205,9 @@ def test_recompute_all_scores_isolates_a_failing_account_instead_of_aborting_the
                 {"id": "acc-good", "name": "Good Co", "contract_value_monthly": 5000},
             ],
             "signal_snapshot": [
-                _snapshot("acc-bad", "2026-01-01", avg_response_time_hours="not-a-number"),
+                _snapshot(
+                    "acc-bad", "2026-01-01", avg_response_time_hours="not-a-number"
+                ),
             ]
             + _stable_snapshots("acc-good"),
         }
@@ -207,7 +216,7 @@ def test_recompute_all_scores_isolates_a_failing_account_instead_of_aborting_the
     try:
         response = client.post("/score/recompute")
     finally:
-        app.dependency_overrides.pop(scoring._require_supabase_client, None)
+        app.dependency_overrides.pop(require_auth_context, None)
 
     assert response.status_code == 200
     body = response.json()
@@ -226,7 +235,7 @@ def test_recompute_without_supabase_configured_returns_503(monkeypatch):
     monkeypatch.setattr(settings, "supabase_url", "")
     monkeypatch.setattr(settings, "supabase_service_role_key", "")
     get_supabase_client.cache_clear()
-    app.dependency_overrides.pop(scoring._require_supabase_client, None)
+    app.dependency_overrides.pop(require_auth_context, None)
     client = TestClient(app)
 
     response = client.post("/score/recompute/acc-1")

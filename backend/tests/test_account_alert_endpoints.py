@@ -1,9 +1,10 @@
+from fastapi.testclient import TestClient
+
+from app.auth import require_auth_context
 from app.dependencies import require_supabase_client
 from app.main import app
 from app.routers import alerts
-from fastapi.testclient import TestClient
-
-from tests.fakes import FakeSupabaseClient
+from tests.fakes import FakeSupabaseClient, authenticated_context
 
 ACCOUNT_ID = "11111111-1111-4111-8111-111111111111"
 ALERT_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
@@ -24,6 +25,7 @@ def _alert(status: str = "open") -> dict:
 
 def _client(fake: FakeSupabaseClient) -> TestClient:
     app.dependency_overrides[require_supabase_client] = lambda: fake
+    app.dependency_overrides[require_auth_context] = lambda: authenticated_context(fake)
     return TestClient(app, raise_server_exceptions=False)
 
 

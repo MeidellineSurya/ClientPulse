@@ -13,7 +13,7 @@ from google.auth.exceptions import GoogleAuthError
 from googleapiclient.errors import HttpError
 from httplib2 import HttpLib2Error
 
-from app.db import get_supabase_client
+from app.auth import AuthContext, require_auth_context
 from app.google_client import (
     get_calendar_service,
     get_gmail_service,
@@ -32,25 +32,16 @@ from app.services.signal_snapshot_repo import (
     update_invoice_days_late,
     upsert_gmail_calendar_signals,
 )
-from supabase import Client
 
 router = APIRouter(prefix="/ingest", tags=["ingest"])
-
-
-def _require_supabase_client() -> Client:
-    # Wraps get_supabase_client() so a missing SUPABASE_* config surfaces as
-    # a clean 503 instead of an unhandled 500.
-    try:
-        return get_supabase_client()
-    except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @router.post("/csv", response_model=CsvIngestResult)
 async def ingest_csv(
     file: UploadFile,
-    client: Client = Depends(_require_supabase_client),  # noqa: B008 - FastAPI dependency
+    auth: AuthContext = Depends(require_auth_context),  # noqa: B008 - FastAPI dependency
 ) -> CsvIngestResult:
+    client = auth.client
     raw = await file.read()
     if not raw:
         raise HTTPException(status_code=400, detail="Uploaded file is empty")
@@ -71,7 +62,7 @@ async def ingest_csv(
     # Look up which of the emails in this CSV correspond to real seeded
     # accounts, and fetch those accounts' signal_snapshot periods.
     emails = sorted({row.account_email for row in result.parsed})
-    account_id_by_email = fetch_account_ids_by_email(client, emails)
+    account_id_by_email = fetch_account_ids_by_email(client, emails, auth.agency_id)
     account_ids = sorted(set(account_id_by_email.values()))
     snapshots_by_account = fetch_snapshots_by_account(client, account_ids)
 
@@ -100,8 +91,9 @@ async def ingest_gmail_calendar(
     account_id: UUID,
     period_start: date | None = None,
     period_end: date | None = None,
-    client: Client = Depends(_require_supabase_client),  # noqa: B008 - FastAPI dependency
+    auth: AuthContext = Depends(require_auth_context),  # noqa: B008 - FastAPI dependency
 ) -> GmailCalendarIngestResult:
+    client = auth.client
     account_key = str(account_id)
     if (period_start is None) != (period_end is None):
         raise HTTPException(
@@ -119,7 +111,7 @@ async def ingest_gmail_calendar(
             status_code=422, detail="period_end must not be before period_start"
         )
 
-    contact_email = fetch_account_email(client, account_key)
+    contact_email = fetch_account_email(client, account_key, auth.agency_id)
     if contact_email is None:
         raise HTTPException(status_code=404, detail="account not found")
 
