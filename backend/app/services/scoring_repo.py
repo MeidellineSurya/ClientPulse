@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from postgrest.exceptions import APIError
 from supabase import Client
 
-from app.services.baseline_engine import TRACKED_SIGNALS
+from app.services.baseline_engine import RAW_SIGNAL_COLUMNS
 from app.services.scoring_engine import SEVERITY_ORDER
 
 
@@ -60,10 +60,16 @@ def fetch_accounts_with_contract_value(
 
 
 def fetch_signal_history(client: Client, account_id: str) -> list[dict]:
-    """All signal_snapshot rows for one account, oldest period first."""
+    """All signal_snapshot rows for one account, oldest period first,
+    including primary_contact_email — the raw column
+    scoring_engine.score_account_history derives its contact_changed signal
+    from (see baseline_engine.derive_contact_changed)."""
     resp = (
         client.table("signal_snapshot")
-        .select("period_start, period_end, " + ", ".join(TRACKED_SIGNALS))
+        .select(
+            "period_start, period_end, primary_contact_email, "
+            + ", ".join(RAW_SIGNAL_COLUMNS)
+        )
         .eq("account_id", account_id)
         .execute()
     )

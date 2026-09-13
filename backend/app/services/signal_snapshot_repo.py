@@ -82,19 +82,29 @@ def upsert_gmail_calendar_signals(
     email_thread_count: int,
     meetings_scheduled: int,
     meetings_cancelled: int,
+    primary_contact_email: str | None = None,
 ) -> None:
     """Writes Gmail/Calendar-derived columns onto the signal_snapshot row
     for this account/period — updating it if the period was already
     seeded/created, inserting a new row otherwise (e.g. for the current,
     not-yet-seeded week). Never touches invoice_days_late, which CSV
     ingestion owns.
+
+    primary_contact_email stamps the account's *current* contact onto this
+    period, building up the per-period history that
+    baseline_engine.derive_contact_changed compares consecutive periods
+    against to detect a stakeholder change. Optional only so existing
+    callers/tests that don't care about the contact-turnover signal don't
+    have to pass it.
     """
-    payload = {
+    payload: dict[str, float | str] = {
         "avg_response_time_hours": avg_response_time_hours,
         "email_thread_count": email_thread_count,
         "meetings_scheduled": meetings_scheduled,
         "meetings_cancelled": meetings_cancelled,
     }
+    if primary_contact_email is not None:
+        payload["primary_contact_email"] = primary_contact_email
     snapshot_id = find_snapshot_for_period(client, account_id, period_start, period_end)
     if snapshot_id is not None:
         client.table("signal_snapshot").update(payload).eq("id", snapshot_id).execute()

@@ -4,6 +4,7 @@
 
 import json
 from types import SimpleNamespace
+from typing import Any
 
 TEST_AGENCY_ID = "00000000-0000-4000-8000-000000000001"
 TEST_USER_ID = "00000000-0000-4000-8000-000000000002"
@@ -102,7 +103,7 @@ class FakeQuery:
 class FakeSupabaseClient:
     def __init__(self, tables: dict[str, list[dict]]):
         self._tables = tables
-        self.auth = SimpleNamespace()
+        self.auth: Any = SimpleNamespace()
 
         # Real rows are protected by account -> agency foreign keys. Most
         # pre-auth tests intentionally omit that boilerplate, so normalize

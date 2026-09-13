@@ -99,6 +99,7 @@ def test_gmail_calendar_ingestion_writes_computed_live_signals(monkeypatch):
         "email_thread_count": 1,
         "meetings_scheduled": 1,
         "meetings_cancelled": 1,
+        "primary_contact_email": "client@example.com",
     }
 
 

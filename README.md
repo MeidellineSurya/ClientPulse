@@ -92,7 +92,13 @@ and falls back rather than crashing.
 - [x] Scoring engine (`/score/recompute[/{account_id}]` — deterministic composite risk,
       revenue-at-risk, per-signal explainability breakdown, alert dedup; merged to
       `main`, run for real against the live project — 15 accounts scored, 3 alerts
-      fired, $418,369.20 total revenue at risk)
+      fired, $418,369.20 total revenue at risk — **stale pending the
+      contact-turnover migration below**, since that reweights the score)
+- [x] Point-of-contact turnover signal (`contact_changed` — a new stakeholder
+      taking over an account, derived from `signal_snapshot.primary_contact_email`;
+      see HANDOFF.md §5.1). Requires running
+      `supabase/migrations/20260913_contact_turnover_signal.sql` against any
+      already-provisioned project before `/score/recompute` will pick it up.
 - [x] Groq brief provider implemented (`retention_radar/briefs.py` + `groq.py`) —
       wired into `POST /score/recompute`, verified against the live Supabase
       project with real LLM-generated briefs

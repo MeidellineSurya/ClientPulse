@@ -2,6 +2,7 @@
 
 from app.services.baseline_engine import (
     compute_baselines,
+    derive_contact_changed,
     mean_stddev,
     split_baseline_and_trend_windows,
 )
@@ -78,3 +79,36 @@ def test_compute_baselines_ignores_missing_values():
     avg, stddev = baselines["meetings_cancelled"]
     assert avg == 0.0
     assert stddev is None
+
+
+def test_derive_contact_changed_first_period_is_never_a_change():
+    history = [{"primary_contact_email": "a@example.com"}]
+    assert derive_contact_changed(history)[0]["contact_changed"] == 0
+
+
+def test_derive_contact_changed_flags_a_transition_between_known_emails():
+    history = [
+        {"primary_contact_email": "old@example.com"},
+        {"primary_contact_email": "old@example.com"},
+        {"primary_contact_email": "new@example.com"},
+    ]
+    flags = [row["contact_changed"] for row in derive_contact_changed(history)]
+    assert flags == [0, 0, 1]
+
+
+def test_derive_contact_changed_treats_unknown_email_as_no_signal():
+    # A missing/unknown email (e.g. a period ingested before this field
+    # existed) must never itself register as a change, in either direction.
+    history = [
+        {"primary_contact_email": None},
+        {"primary_contact_email": "a@example.com"},
+        {"primary_contact_email": None},
+    ]
+    flags = [row["contact_changed"] for row in derive_contact_changed(history)]
+    assert flags == [0, 0, 0]
+
+
+def test_derive_contact_changed_does_not_mutate_input_rows():
+    history = [{"primary_contact_email": "a@example.com"}]
+    derive_contact_changed(history)
+    assert "contact_changed" not in history[0]
