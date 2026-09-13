@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { Link, useNavigate, useParams } from "react-router-dom"
+import { useNavigate, useParams } from "react-router-dom"
 import { Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 
 import { EmptyState } from "@/components/ui/EmptyState"
@@ -14,7 +14,6 @@ import {
   formatSignalValue,
   MIN_DATA_COVERAGE_DAYS,
   riskTier,
-  severityStyles,
   signalStatus,
   SIGNAL_STATUS_TEXT,
   TRACKED_SIGNALS,
@@ -347,7 +346,7 @@ export function AccountDetail() {
             <h2 className="text-[17px]">Signal trends</h2>
             <p className="mt-1 text-[12.5px] text-neutral-700">
               Raw signal values over each scored period. Good/Watch/Risk is colour-coded against this account's own history, not a fixed
-              threshold — the same "compare to its own baseline" rule the risk score itself uses.
+              threshold.
             </p>
           </section>
           <section className="grid gap-4 px-10 pb-8 [grid-template-columns:repeat(auto-fit,minmax(280px,1fr))]">
@@ -359,12 +358,7 @@ export function AccountDetail() {
 
           {latestAlertWithBrief && (
             <section className="rule bg-surface px-10 pb-7 pt-6">
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="text-[10.5px] font-extrabold uppercase tracking-[0.1em] text-accent-700">AI brief</div>
-                <span className={cn("px-2 py-[3px] text-[10.5px] font-extrabold uppercase tracking-[0.05em]", severityStyles[latestAlertWithBrief.severity])}>
-                  {latestAlertWithBrief.severity}
-                </span>
-              </div>
+              <div className="text-[15px] font-extrabold uppercase tracking-[0.06em] text-accent-700">AI brief</div>
 
               {latestAlertWithBrief.signals_fired.length > 0 && (
                 <div className="mt-3 flex flex-wrap items-center gap-1.5">
@@ -385,10 +379,6 @@ export function AccountDetail() {
                   <div className="mt-1 text-[17px] font-extrabold leading-tight text-ground">{latestAlertWithBrief.suggested_action}</div>
                 </div>
               )}
-
-              <div className="mt-4 border-t border-divider pt-2.5 text-[11px] text-neutral-600">
-                Written from the signals above. The score itself is deterministic — the model never sets it.
-              </div>
             </section>
           )}
         </>
@@ -408,29 +398,6 @@ export function AccountDetail() {
           />
         </section>
       )}
-
-      <section className="px-10 pb-12 pt-7">
-        <h2 className="mb-2.5 text-[17px]">Alerts for this account</h2>
-        {account.alerts.length === 0 ? (
-          <p className="text-[13px] text-neutral-700">No alerts have fired for this account.</p>
-        ) : (
-          <div className="border-t-2 border-divider">
-            {account.alerts.map((alert) => (
-              <Link
-                key={alert.id}
-                to="/alerts"
-                className="flex flex-wrap items-center gap-3 border-b border-divider py-3 text-left hover:bg-ink/[0.05]"
-              >
-                <span className={cn("px-2 py-[3px] text-[10.5px] font-extrabold uppercase tracking-[0.05em]", severityStyles[alert.severity])}>
-                  {alert.severity}
-                </span>
-                <span className="text-[13px]">{alert.signals_fired.map(formatSignalName).join(", ") || "No signals recorded"}</span>
-                <span className="ml-auto whitespace-nowrap text-[11px] text-neutral-600">{formatDate(alert.triggered_at)} · {alert.status}</span>
-              </Link>
-            ))}
-          </div>
-        )}
-      </section>
     </div>
   )
 }

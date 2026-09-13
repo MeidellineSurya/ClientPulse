@@ -8,11 +8,8 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from gotrue.errors import AuthError, AuthRetryableError
 from supabase import Client
 
+from app.db import RETRY_ATTEMPTS, RETRY_DELAY_SECONDS, with_retry
 from app.dependencies import require_supabase_client
-
-# A transient Supabase Auth disconnect (AuthRetryableError) is worth one immediate retry before surfacing a 503.
-AUTH_RETRY_ATTEMPTS = 2
-AUTH_RETRY_DELAY_SECONDS = 0.15
 
 
 @dataclass(frozen=True)
@@ -45,17 +42,19 @@ def require_auth_context(
         raise _unauthorized()
 
     token = credentials.credentials.strip()
+    # gotrue wraps a transient disconnect as AuthRetryableError (not the raw
+    # httpx.TransportError app/db.py's with_retry catches), so it gets its own loop.
     last_retryable_error: AuthRetryableError | None = None
     response = None
-    for attempt in range(AUTH_RETRY_ATTEMPTS):
+    for attempt in range(RETRY_ATTEMPTS):
         try:
             response = client.auth.get_user(token)
             last_retryable_error = None
             break
         except AuthRetryableError as exc:
             last_retryable_error = exc
-            if attempt < AUTH_RETRY_ATTEMPTS - 1:
-                time.sleep(AUTH_RETRY_DELAY_SECONDS)
+            if attempt < RETRY_ATTEMPTS - 1:
+                time.sleep(RETRY_DELAY_SECONDS)
         except AuthError as exc:
             raise _unauthorized("invalid bearer token") from exc
     if last_retryable_error is not None:
@@ -67,11 +66,8 @@ def require_auth_context(
     if user is None:
         raise _unauthorized("invalid bearer token")
 
-    membership = (
-        client.table("agency_member")
-        .select("agency_id")
-        .eq("user_id", str(user.id))
-        .execute()
+    membership = with_retry(
+        lambda: client.table("agency_member").select("agency_id").eq("user_id", str(user.id)).execute()
     )
     if not membership.data:
         raise HTTPException(status_code=403, detail="user is not assigned to an agency")

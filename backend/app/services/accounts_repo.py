@@ -6,6 +6,8 @@ full row shape for display, not the subset scoring computes drift from.
 
 from supabase import Client
 
+from app.db import with_retry
+
 SIGNAL_SNAPSHOT_COLUMNS = (
     "period_start, period_end, avg_response_time_hours, meetings_scheduled, "
     "meetings_cancelled, invoice_days_late, email_thread_count, primary_contact_email"
@@ -13,17 +15,13 @@ SIGNAL_SNAPSHOT_COLUMNS = (
 
 
 def fetch_all_accounts(client: Client, agency_id: str) -> list[dict]:
-    resp = client.table("account").select("*").eq("agency_id", agency_id).execute()
+    resp = with_retry(lambda: client.table("account").select("*").eq("agency_id", agency_id).execute())
     return resp.data
 
 
 def fetch_account(client: Client, account_id: str, agency_id: str) -> dict | None:
-    resp = (
-        client.table("account")
-        .select("*")
-        .eq("id", account_id)
-        .eq("agency_id", agency_id)
-        .execute()
+    resp = with_retry(
+        lambda: client.table("account").select("*").eq("id", account_id).eq("agency_id", agency_id).execute()
     )
     return resp.data[0] if resp.data else None
 
@@ -37,8 +35,8 @@ def fetch_latest_health_scores(
     everything and reduces in Python (fine at hackathon scale)."""
     if not account_ids:
         return {}
-    resp = (
-        client.table("health_score")
+    resp = with_retry(
+        lambda: client.table("health_score")
         .select("account_id, composite_score, trend_slope, computed_at")
         .in_("account_id", account_ids)
         .execute()
@@ -54,8 +52,8 @@ def fetch_latest_health_scores(
 def fetch_latest_health_score(client: Client, account_id: str) -> dict | None:
     """Most recent health_score row for a single account, or None if it
     has never been scored yet."""
-    resp = (
-        client.table("health_score")
+    resp = with_retry(
+        lambda: client.table("health_score")
         .select("composite_score, trend_slope, computed_at")
         .eq("account_id", account_id)
         .execute()
@@ -70,8 +68,8 @@ def fetch_health_score_history(client: Client, account_id: str) -> list[dict]:
     for the account-detail page's composite-score-over-time chart. Distinct
     from fetch_latest_health_score, which only needs the single most recent
     row."""
-    resp = (
-        client.table("health_score")
+    resp = with_retry(
+        lambda: client.table("health_score")
         .select("composite_score, trend_slope, computed_at")
         .eq("account_id", account_id)
         .execute()
@@ -84,8 +82,8 @@ def fetch_full_signal_history(client: Client, account_id: str) -> list[dict]:
     everything the account-detail and per-account charts endpoints need to
     display, not just the subset scoring_repo.fetch_signal_history reads
     for drift computation."""
-    resp = (
-        client.table("signal_snapshot")
+    resp = with_retry(
+        lambda: client.table("signal_snapshot")
         .select(SIGNAL_SNAPSHOT_COLUMNS)
         .eq("account_id", account_id)
         .execute()
