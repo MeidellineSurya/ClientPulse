@@ -93,7 +93,8 @@ def test_set_alert_status_updates_and_returns_the_alert():
                     "2026-01-01T00:00:00",
                     status="open",
                 )
-            ]
+            ],
+            "account": [{"id": "acc-1", "name": "Acme"}],
         }
     )
     client = _override_client(fake_client)
@@ -108,6 +109,7 @@ def test_set_alert_status_updates_and_returns_the_alert():
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "acknowledged"
+    assert body["account_name"] == "Acme"
     assert fake_client._tables["alert"][0]["status"] == "acknowledged"
 
 

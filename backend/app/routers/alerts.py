@@ -9,6 +9,7 @@ from supabase import Client
 from app.auth import AuthContext, require_auth_context
 from app.schemas import AlertOut, UpdateAlertStatusRequest
 from app.services.alerts_repo import (
+    fetch_account_name,
     fetch_alert,
     fetch_all_alerts,
     update_alert_status_if_current,
@@ -49,8 +50,9 @@ def _transition_alert_status(
         raise HTTPException(
             status_code=409, detail="alert status cannot move backwards"
         )
+    account_name = fetch_account_name(client, existing["account_id"], agency_id)
     if existing["status"] == body.status:
-        return AlertOut(**existing, account_name=None)
+        return AlertOut(**existing, account_name=account_name)
 
     updated = update_alert_status_if_current(
         client,
@@ -61,7 +63,7 @@ def _transition_alert_status(
     )
     if updated is None:
         raise HTTPException(status_code=409, detail="alert status changed concurrently")
-    return AlertOut(**updated, account_name=None)
+    return AlertOut(**updated, account_name=account_name)
 
 
 @router.post("/{alert_id}/status", response_model=AlertOut)

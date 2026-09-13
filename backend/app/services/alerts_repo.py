@@ -26,6 +26,11 @@ def _fetch_account_names(
     return {row["id"]: row["name"] for row in resp.data}
 
 
+def fetch_account_name(client: Client, account_id: str, agency_id: str) -> str | None:
+    """Return the display name for one account within the authorised agency."""
+    return _fetch_account_names(client, [account_id], agency_id).get(account_id)
+
+
 def fetch_all_alerts(
     client: Client, agency_id: str, status: str | None = None
 ) -> list[dict]:
