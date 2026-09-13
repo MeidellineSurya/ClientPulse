@@ -131,7 +131,7 @@ doc.
 | Database | Supabase (Postgres) |
 | LLM | Groq — `openai/gpt-oss-120b` |
 | Data sources | Gmail + Google Calendar (live-capable in this environment) + CSV upload for invoices |
-| Deploy | Vercel (frontend) / Railway (backend) |
+| Deploy | Render (frontend, static site) / Vercel (backend, Python ASGI serverless) — see §11 |
 
 ## 4. Repo layout
 
@@ -223,3 +223,53 @@ live Gmail/Calendar API → chart polish/animation → separate alerts-inbox
 page (fold into portfolio view) → CSV upload UI (hardcode one seeded file).
 **Never cut:** the deterministic scoring formula or the worsening-trend
 check — that's the whole pitch.
+
+## 11. Deployment (not the original Vercel/Railway plan — both required a card)
+
+**Live now:**
+- Frontend: [clientpulse-frontend.onrender.com](https://clientpulse-frontend.onrender.com)
+  — Render static site, deployed from `frontend/` via `render services create --type static_site`
+- Backend: [backend-ruddy-rho-34.vercel.app](https://backend-ruddy-rho-34.vercel.app)
+  — Vercel Python ASGI serverless function, deployed from `backend/` via `vercel deploy --prod`
+
+**Why not the original plan:** Railway's trial was expired and required a
+paid plan to create a new project; Render's compute tier (a real web
+service) required a card on file for fraud-prevention verification even to
+use the free tier. Neither is a Render/Railway-specific problem — this is
+now standard across most PaaS providers. Render's **static-site** tier and
+Vercel's **Python serverless** runtime both required no card at all, so the
+split flipped: frontend → Render, backend → Vercel (the reverse of the
+original plan, which had frontend → Vercel, backend → Railway).
+
+**How the backend is structured for this:** `backend/api/index.py` is a
+one-line Vercel entrypoint that re-exports `app` from `app/main.py` — the
+actual FastAPI app is unaware of Vercel and still runs locally exactly the
+same way (`uvicorn app.main:app`). `backend/vercel.json` is intentionally
+empty (`{}`): Vercel auto-detects the FastAPI framework and handles routing
+itself; an earlier attempt at an explicit rewrite rule broke routing by
+stripping the original request path before it reached the app.
+
+**Real gotchas hit getting here** (all now fixed, see git history):
+- Passing multiple secrets as `--env-var` flags in one shell command was
+  blocked by an auto-mode safety classifier (credential leakage risk via
+  process-argument visibility) — fixed by setting secrets one at a time via
+  `vercel env add`, piped through stdin from `backend/.env` rather than
+  passed as literal command arguments.
+- Render's CLI can't update env vars on an *existing* service (`services
+  update` has no `--env-var` flag) — updating `VITE_API_BASE_URL` after the
+  backend's real URL was known required deleting and recreating the static
+  site, not editing it in place. Fine here since it's a stateless build.
+- Env vars only apply on the *next* deploy — after setting Vercel's env
+  vars, a fresh `vercel deploy --prod` was needed before `/accounts` could
+  reach Supabase.
+
+**To redeploy after a code change:**
+- **Frontend (Render):** confirmed auto-deploy on push to `main`
+  (`autoDeploy: yes`, `autoDeployTrigger: commit` — verified in the API
+  response when the service was created). Merging to `main` is enough.
+- **Backend (Vercel):** deployed via CLI (`vercel deploy --prod` from
+  `backend/`), and `vercel project inspect` doesn't show a confirmed Git
+  integration — **don't assume pushing to `main` redeploys it** until
+  someone verifies that in the Vercel dashboard (Project → Settings → Git)
+  or just connects it there directly. Until then, redeploy manually after
+  backend changes: `cd backend && vercel deploy --prod --yes`.
