@@ -9,11 +9,12 @@ invoices) before the client says anything.
 
 > 🚧 Hackathon build. This repo is being scaffolded incrementally — see commit
 > history for progress. Backend + frontend are live and verified end-to-end
-> against a real Supabase project, including real Groq-generated AI briefs on
-> alerts. Production Gmail/Calendar OAuth ingestion is implemented, but
-> live-account verification still needs project-specific Google credentials.
-> `app/services/scoring_engine.py` is confirmed as the sole alert-decision
-> engine — see HANDOFF.md.
+> against a real Supabase project, behind real Supabase Auth (bearer tokens,
+> agency-scoped access) — the app is no longer open access. Gmail/Calendar
+> OAuth ingestion and CSV invoice import are both live-verified against real
+> accounts/data, not just implemented. Groq-generated AI briefs are confirmed
+> working in production. `app/services/scoring_engine.py` is confirmed as the
+> sole alert-decision engine — see HANDOFF.md.
 >
 > Pitch, scoring formula, product decisions, and demo script: see
 > [HANDOFF.md](./HANDOFF.md).
@@ -114,14 +115,24 @@ and falls back rather than crashing.
 - [x] FastAPI skeleton
 - [x] FastAPI endpoints (`/ingest/csv`, `GET /accounts[/{id}][/signals][/health-history]`,
       `GET /alerts`, `POST/PATCH /alerts/{id}` — all real Supabase reads/writes,
-      146/146 tests, merged to `main`, run for real against the live project)
+      186/186 tests, merged to `main`, run for real against the live project)
+- [x] CSV invoice import — **live-verified**: a real invoice CSV POSTed to the
+      production backend correctly matched an account by email, computed
+      `invoice_days_late`, and updated the right `signal_snapshot` period
 - [x] Gmail/Calendar OAuth ingestion (metadata-only Gmail + read-only Calendar,
       explicit token refresh/scope checks, tested API fetch and snapshot-write path)
-- [ ] Live Gmail/Calendar account verification (no Google credentials available yet)
+- [x] Live Gmail/Calendar account verification — **done**: a real Google OAuth
+      connection (exactly the `gmail.metadata` + `calendar.readonly` scopes,
+      nothing extra) made a real end-to-end ingest call in ~8.6s. Found and
+      fixed a real bug in the process: the Gmail metadata scan had no date
+      bound (Gmail blocks the `q` search param under this scope) and would
+      have crawled a connected mailbox's *entire* history on every call — now
+      bounded to the requested period, with a hard cap as a backstop.
 - [x] Scoring engine (`/score/recompute[/{account_id}]` — deterministic composite risk,
       revenue-at-risk, per-signal explainability breakdown, alert dedup; merged to
       `main`, run for real against the live project — 15 accounts scored, 3 alerts
-      fired, $418,369.20 total revenue at risk)
+      fired, $349,492.80 total revenue at risk as of 2026-09-13 — this number
+      moves whenever scores are recomputed, re-verify before quoting it live)
 - [x] Point-of-contact turnover signal (`contact_changed` — a new stakeholder
       taking over an account, derived from `signal_snapshot.primary_contact_email`;
       see HANDOFF.md §5.1). Its migration
@@ -129,7 +140,9 @@ and falls back rather than crashing.
       but not actually applied to the live project until it was caught by a
       failing `/score/recompute` call — **now applied and verified**; any other
       already-provisioned project still needs it run manually (see "Running
-      locally" above).
+      locally" above). A visible "new point of contact" callout on the Account
+      Detail page is also live (`AccountDetail.tsx`), independent of whether an
+      alert has fired.
 - [x] Alert revision/optimistic-concurrency migration
       (`supabase/migrations/20260913_alert_brief_persistence.sql`) — same story
       as above: committed but not applied, silently broke every new alert
@@ -138,7 +151,10 @@ and falls back rather than crashing.
       persists all 3 fired alerts with `failed_account_ids: []`.
 - [x] Groq brief provider implemented (`retention_radar/briefs.py` + `groq.py`) —
       wired into `POST /score/recompute`, verified against the live Supabase
-      project with real LLM-generated briefs
+      project with real LLM-generated briefs. (Gotcha hit later: a stale key
+      in production wasn't actually stale — it was a single leading space in
+      `GROQ_API_KEY= gsk_...` in `.env`, which produces a `401` with no other
+      symptom. Check for that first before assuming a key needs rotating.)
 - [x] React (Vite) frontend — redesigned onto a custom flat/Modernist visual
       system (see `frontend/reference/README.md` for the design brief this
       followed); Portfolio, Accounts (new — full sortable/searchable book),
@@ -151,14 +167,19 @@ and falls back rather than crashing.
 - [x] Authenticated backend deployed on Vercel and verified live: `/health`
       remains public while `/accounts` and `/alerts` reject missing bearer tokens
       with `401`
-- [ ] Deploy the merged frontend auth build to Render. Render is still serving
-      the older unauthenticated bundle and did not auto-deploy after the merge
-- [ ] Configure Render with `VITE_API_BASE_URL`, `VITE_SUPABASE_URL`, and
+- [x] Frontend auth build deployed to Render and verified live in a real
+      browser session — the "Welcome back / Sign in" gate actually renders,
+      no console errors. (Render's auto-deploy on push is configured but has
+      proven unreliable more than once — a manual `render deploys create`
+      was needed after this merge and the one before it. Don't assume a
+      merge alone updated the live frontend; verify the deployed bundle.)
+- [x] Render configured with `VITE_API_BASE_URL`, `VITE_SUPABASE_URL`, and
       `VITE_SUPABASE_ANON_KEY` (never the service-role key)
-- [ ] Change Supabase Auth's Site URL from localhost to the production frontend,
-      allow its callback URLs, send a fresh password-recovery email, and verify
-      invite acceptance/password setup/login end to end
-- [ ] Configure the backend deployment's `GOOGLE_AGENCY_ID` before attempting
-      live Gmail/Calendar verification; Google access intentionally fails closed
-      while that binding is absent
+- [x] Supabase Auth's Site URL set to the production frontend, its callback
+      allowed, a real password-recovery email sent and verified end to end:
+      callback → session → set password → authenticated `/accounts` request
+      → real StudioCo-scoped data
+- [x] Backend deployment's `GOOGLE_AGENCY_ID` configured, and live
+      Gmail/Calendar ingestion verified against a real connected account
+      (see above)
 - [ ] Demo run-through rehearsed end to end
