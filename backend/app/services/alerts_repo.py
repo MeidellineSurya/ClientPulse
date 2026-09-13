@@ -8,6 +8,8 @@ module testable against the plain-table FakeSupabaseClient used in tests.
 
 from supabase import Client
 
+from app.db import with_retry
+
 ALERT_COLUMNS = "id, account_id, triggered_at, signals_fired, severity, ai_brief, suggested_action, status"
 
 
@@ -16,8 +18,8 @@ def _fetch_account_names(
 ) -> dict[str, str]:
     if not account_ids:
         return {}
-    resp = (
-        client.table("account")
+    resp = with_retry(
+        lambda: client.table("account")
         .select("id, name")
         .eq("agency_id", agency_id)
         .in_("id", account_ids)
@@ -36,16 +38,16 @@ def fetch_all_alerts(
 ) -> list[dict]:
     """Every alert for one agency, newest triggered_at first, each
     with the account's name attached for display."""
-    accounts = (
-        client.table("account").select("id").eq("agency_id", agency_id).execute().data
-    )
+    accounts = with_retry(
+        lambda: client.table("account").select("id").eq("agency_id", agency_id).execute()
+    ).data
     account_ids = [account["id"] for account in accounts]
     if not account_ids:
         return []
     query = client.table("alert").select(ALERT_COLUMNS).in_("account_id", account_ids)
     if status is not None:
         query = query.eq("status", status)
-    resp = query.execute()
+    resp = with_retry(query.execute)
     alerts = sorted(resp.data, key=lambda row: row["triggered_at"], reverse=True)
     names = _fetch_account_names(client, [a["account_id"] for a in alerts], agency_id)
     return [
@@ -56,24 +58,21 @@ def fetch_all_alerts(
 def fetch_alerts_for_account(client: Client, account_id: str) -> list[dict]:
     """One account's alerts, newest triggered_at first — for the account
     detail endpoint (no account_name needed, the caller already has it)."""
-    resp = (
-        client.table("alert")
-        .select(ALERT_COLUMNS)
-        .eq("account_id", account_id)
-        .execute()
+    resp = with_retry(
+        lambda: client.table("alert").select(ALERT_COLUMNS).eq("account_id", account_id).execute()
     )
     return sorted(resp.data, key=lambda row: row["triggered_at"], reverse=True)
 
 
 def fetch_alert(client: Client, alert_id: str, agency_id: str) -> dict | None:
-    account_rows = (
-        client.table("account").select("id").eq("agency_id", agency_id).execute().data
-    )
+    account_rows = with_retry(
+        lambda: client.table("account").select("id").eq("agency_id", agency_id).execute()
+    ).data
     account_ids = [row["id"] for row in account_rows]
     if not account_ids:
         return None
-    resp = (
-        client.table("alert")
+    resp = with_retry(
+        lambda: client.table("alert")
         .select(ALERT_COLUMNS)
         .eq("id", alert_id)
         .in_("account_id", account_ids)
@@ -91,8 +90,8 @@ def update_alert_status_if_current(
     new_status: str,
 ) -> dict | None:
     """Conditionally update an alert so stale readers cannot regress state."""
-    resp = (
-        client.table("alert")
+    resp = with_retry(
+        lambda: client.table("alert")
         .update({"status": new_status})
         .eq("id", alert_id)
         .eq("account_id", account_id)
