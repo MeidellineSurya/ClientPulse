@@ -1,4 +1,6 @@
 import random
+from collections import defaultdict
+from itertools import pairwise
 
 from scripts import generate_seed
 from scripts.backfill_health_history import compute_period_scores
@@ -55,3 +57,29 @@ def test_representative_demo_scenarios_have_non_flat_rolling_score_curves():
         account = next(a for a in dataset["accounts"] if a["scenario"] == scenario)
         _, scores = compute_period_scores(dataset["snapshots_by_account"][account["id"]])
         assert len(set(scores)) >= 4, scenario
+
+
+def test_portfolio_score_curve_fluctuates_without_one_synchronised_spike():
+    dataset = _dataset()
+    scores_by_period = defaultdict(list)
+    for account in dataset["accounts"]:
+        if account["scenario"] == "new_account":
+            continue
+        periods, scores = compute_period_scores(
+            dataset["snapshots_by_account"][account["id"]]
+        )
+        for period, score in zip(periods, scores):
+            scores_by_period[period["period_end"]].append(score)
+
+    portfolio_curve = [
+        sum(scores) / len(scores)
+        for _period, scores in sorted(scores_by_period.items())
+    ]
+    deltas = [
+        current - previous
+        for previous, current in pairwise(portfolio_curve)
+    ]
+
+    assert max(abs(delta) for delta in deltas) <= 8
+    assert sum(delta > 0 for delta in deltas) >= 5
+    assert sum(delta < 0 for delta in deltas) >= 5

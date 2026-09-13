@@ -82,11 +82,37 @@ DEMO_ALERT_PROFILES_BY_SCENARIO = {
         ("resolved", "medium"),
         ("resolved", "low"),
     ],
+    "cancellation_deterioration": [
+        ("open", "high"),
+        ("acknowledged", "medium"),
+        ("resolved", "low"),
+    ],
+    "contact_watch": [("acknowledged", "medium")],
     "recovery": [
         ("resolved", "low"),
         ("resolved", "medium"),
     ],
     "acute_churn": [("open", "critical")],
+}
+
+DEMO_ALERT_SIGNALS_BY_SCENARIO = {
+    "worsening": [
+        "avg_response_time_hours",
+        "meetings_cancelled",
+        "invoice_days_late",
+    ],
+    "response_shock": ["avg_response_time_hours"],
+    "cancellation_deterioration": [
+        "meetings_scheduled",
+        "meetings_cancelled",
+    ],
+    "contact_watch": ["contact_changed", "avg_response_time_hours"],
+    "recovery": ["avg_response_time_hours", "invoice_days_late"],
+    "acute_churn": [
+        "avg_response_time_hours",
+        "meetings_cancelled",
+        "invoice_days_late",
+    ],
 }
 
 
@@ -98,7 +124,7 @@ def stable_uuid(*parts: str) -> str:
     return str(uuid.uuid5(NAMESPACE, ":".join(parts)))
 
 
-def build_demo_alert_profiles(accounts: list[dict]) -> dict[str, dict[str, str]]:
+def build_demo_alert_profiles(accounts: list[dict]) -> dict[str, dict[str, object]]:
     """Return a deterministic mixed alert lifecycle for the demo inbox."""
     seen = Counter()
     profiles = {}
@@ -110,7 +136,11 @@ def build_demo_alert_profiles(accounts: list[dict]) -> dict[str, dict[str, str]]
         if ordinal >= len(options):
             continue
         status, severity = options[ordinal]
-        profiles[account["id"]] = {"status": status, "severity": severity}
+        profiles[account["id"]] = {
+            "status": status,
+            "severity": severity,
+            "signals_fired": list(DEMO_ALERT_SIGNALS_BY_SCENARIO[scenario]),
+        }
     return profiles
 
 
@@ -124,7 +154,10 @@ def clamp(value: float, low: float, high: float) -> float:
 
 def build_accounts(rng: random.Random, agency_id: str) -> list[dict]:
     accounts = []
+    scenario_ordinals = Counter()
     for index, (name, scenario) in enumerate(zip(ACCOUNT_NAMES, SCENARIOS)):
+        scenario_variant = scenario_ordinals[scenario]
+        scenario_ordinals[scenario] += 1
         contract_value = rng.choice([3000, 4500, 6000, 7500, 8500, 10000, 12500, 15000, 18000, 22000, 25000])
         contract_start = date.today() - timedelta(days=rng.randint(120, 900))
         first, last = rng.choice(CONTACT_FIRST_NAMES), rng.choice(CONTACT_LAST_NAMES)
@@ -140,6 +173,7 @@ def build_accounts(rng: random.Random, agency_id: str) -> list[dict]:
             "agency_id": agency_id,
             "name": name,
             "scenario": scenario,
+            "_scenario_variant": scenario_variant,
             "contract_value_monthly": contract_value,
             "contract_start_date": contract_start.isoformat(),
             "primary_contact_email": new_email or original_email,
@@ -156,7 +190,14 @@ def week_periods(anchor_end: date, weeks: int) -> list[tuple[date, date]]:
     ]
 
 
-def _snapshot_values(rng: random.Random, *, scenario: str, progress: float, base: dict) -> dict:
+def _snapshot_values(
+    rng: random.Random,
+    *,
+    scenario: str,
+    variant: int,
+    progress: float,
+    base: dict,
+) -> dict:
     jitter = lambda spread: rng.uniform(-spread, spread)
     response = base["response"] + jitter(0.6)
     threads = base["threads"] + jitter(3)
@@ -174,20 +215,20 @@ def _snapshot_values(rng: random.Random, *, scenario: str, progress: float, base
         late = base["late"]
 
     if scenario == "worsening":
-        # These are the portfolio's sustained multi-signal At-risk examples:
-        # all eight finish clearly above the UI's 60-point risk cut-off.
-        # Keep the long baseline quiet, then deteriorate visibly across the
-        # final three displayed periods. This prevents the baseline itself
-        # absorbing the decline and hiding a genuine At-risk graph.
-        severity = max(0.0, (progress - 0.90) / 0.10)
-        response += severity * 30
-        threads -= severity * 24
-        scheduled -= severity * 5
-        cancelled += severity * 12
-        late += severity * 32
-    elif scenario == "response_shock" and progress >= 0.92:
-        response += 16 + (progress - 0.92) * 35
-        threads -= 8
+        # Stagger the onset across accounts so the portfolio moves in waves
+        # instead of every at-risk curve jumping on the same reporting date.
+        onset = 0.58 + variant * 0.04
+        severity = max(0.0, (progress - onset) / (1.0 - onset)) ** 2
+        response += severity * 34
+        threads -= severity * 28
+        scheduled -= severity * 6
+        cancelled += severity * 14
+        late += severity * 38
+    elif scenario == "response_shock":
+        onset = 0.72 + variant * 0.04
+        severity = max(0.0, (progress - onset) / (1.0 - onset)) ** 2
+        response += severity * 20
+        threads -= severity * 8
     elif scenario == "invoice_deterioration":
         # Payment trouble is a Watch case only when it is accompanied by a
         # modest communications drift, rather than masquerading as a full
@@ -195,12 +236,15 @@ def _snapshot_values(rng: random.Random, *, scenario: str, progress: float, base
         late += (progress ** 1.35) * 34
         response += (progress ** 1.35) * 9
     elif scenario == "cancellation_deterioration":
-        severity = max(0.0, (progress - 0.90) / 0.10)
-        cancelled += severity * 20
-        scheduled -= severity * 6
-    elif scenario == "acute_churn" and progress >= 0.84:
-        # A late but sustained collapse across the final three plotted bars.
-        severity = (progress - 0.84) / 0.16
+        onset = 0.68 + variant * 0.08
+        severity = max(0.0, (progress - onset) / (1.0 - onset)) ** 2
+        cancelled += severity * 22
+        scheduled -= severity * 7
+    elif scenario == "acute_churn":
+        # One fast collapse remains, but it begins before the final bars so it
+        # does not manufacture a portfolio-wide cliff on the same date.
+        onset = 0.70
+        severity = max(0.0, (progress - onset) / (1.0 - onset)) ** 2
         response += severity * 30
         threads -= severity * 24
         scheduled -= severity * 4
@@ -254,7 +298,13 @@ def build_snapshots(rng: random.Random, account: dict, periods: list[tuple[date,
     snapshots = []
     for index, (start, end) in enumerate(periods):
         progress = index / max(1, len(periods) - 1)
-        values = _snapshot_values(rng, scenario=account["scenario"], progress=progress, base=base)
+        values = _snapshot_values(
+            rng,
+            scenario=account["scenario"],
+            variant=account["_scenario_variant"],
+            progress=progress,
+            base=base,
+        )
         contact_email = account.get("_new_contact_email") if account.get("_new_contact_email") and index == len(periods) - 1 else account["_original_contact_email"]
         snapshots.append({
             "id": stable_uuid("snapshot", account["id"], start.isoformat()),

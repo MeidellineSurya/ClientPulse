@@ -87,15 +87,45 @@ def test_demo_alert_profiles_cover_varied_lifecycle_states_and_severities():
 
     profiles = generate_seed.build_demo_alert_profiles(dataset["accounts"])
 
-    assert len(profiles) == 15
+    assert len(profiles) == 19
     assert Counter(profile["status"] for profile in profiles.values()) == {
-        "open": 5,
-        "acknowledged": 4,
-        "resolved": 6,
+        "open": 6,
+        "acknowledged": 6,
+        "resolved": 7,
     }
     assert Counter(profile["severity"] for profile in profiles.values()) == {
-        "low": 3,
-        "medium": 5,
-        "high": 4,
+        "low": 4,
+        "medium": 7,
+        "high": 5,
         "critical": 3,
     }
+
+    contact_account = next(
+        account for account in dataset["accounts"] if account["scenario"] == "contact_watch"
+    )
+    assert set(profiles[contact_account["id"]]["signals_fired"]) == {
+        "contact_changed",
+        "avg_response_time_hours",
+    }
+    contact_history = dataset["snapshots_by_account"][contact_account["id"]]
+    assert contact_history[0]["primary_contact_email"] != contact_history[-1]["primary_contact_email"]
+    assert contact_history[-1]["avg_response_time_hours"] > contact_history[0]["avg_response_time_hours"]
+
+    scheduling_accounts = [
+        account
+        for account in dataset["accounts"]
+        if account["scenario"] == "cancellation_deterioration"
+    ]
+    assert all(
+        {"meetings_scheduled", "meetings_cancelled"}
+        <= set(profiles[account["id"]]["signals_fired"])
+        for account in scheduling_accounts
+    )
+    for account in scheduling_accounts:
+        history = dataset["snapshots_by_account"][account["id"]]
+        early_scheduled = sum(row["meetings_scheduled"] for row in history[:10]) / 10
+        recent_scheduled = sum(row["meetings_scheduled"] for row in history[-3:]) / 3
+        early_cancelled = sum(row["meetings_cancelled"] for row in history[:10]) / 10
+        recent_cancelled = sum(row["meetings_cancelled"] for row in history[-3:]) / 3
+        assert recent_scheduled < early_scheduled
+        assert recent_cancelled > early_cancelled
