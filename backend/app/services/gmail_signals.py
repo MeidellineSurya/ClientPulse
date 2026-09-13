@@ -18,6 +18,21 @@ from email.utils import getaddresses, parsedate_to_datetime
 
 from googleapiclient.discovery import Resource
 
+# Gmail's users.messages.list, with no query, returns messages newest-first
+# by internal date. Once a listed message's Date header falls before the
+# requested period, every message after it (further back in time) is out of
+# range too, so the scan can stop there instead of walking the rest of the
+# mailbox's history.
+#
+# MAX_MESSAGES_SCANNED is a hard backstop, not the expected case: it caps
+# total work even if that ordering assumption is ever wrong (or a contact
+# genuinely has no messages at all in a very large mailbox), so a single
+# recompute call can never turn into an unbounded crawl of someone's entire
+# email history — only gmail.metadata (headers), never message bodies, but
+# still real inbox metadata that a period-scoped signal has no business
+# touching wholesale.
+MAX_MESSAGES_SCANNED = 500
+
 
 @dataclass
 class MessageMetadata:
@@ -37,10 +52,11 @@ def fetch_message_metadata(
 
     messages: list[MessageMetadata] = []
     page_token = None
+    scanned = 0
     while True:
-        # gmail.metadata deliberately forbids the Gmail `q` parameter. Fetch
-        # metadata pages and filter headers locally so message bodies remain
-        # inaccessible at the OAuth layer.
+        # gmail.metadata deliberately forbids the Gmail `q` parameter, so
+        # there's no server-side way to date-bound this list call — see the
+        # module-level comment for how the loop bounds itself instead.
         list_resp = (
             service.users()
             .messages()
@@ -53,6 +69,9 @@ def fetch_message_metadata(
             .execute()
         )
         for item in list_resp.get("messages", []):
+            scanned += 1
+            if scanned > MAX_MESSAGES_SCANNED:
+                return messages
             detail = (
                 service.users()
                 .messages()
@@ -78,15 +97,18 @@ def fetch_message_metadata(
             if sent_at.tzinfo is None:
                 sent_at = sent_at.replace(tzinfo=UTC)
             sent_at = sent_at.astimezone(UTC)
+            if sent_at < period_min:
+                # Newest-first ordering means everything from here on is
+                # even older than this — nothing further back can still be
+                # inside [period_min, period_max).
+                return messages
             addresses = {
                 address.casefold()
                 for _, address in getaddresses(
                     [headers.get("from", ""), headers.get("to", "")]
                 )
             }
-            if target_email not in addresses or not (
-                period_min <= sent_at < period_max
-            ):
+            if target_email not in addresses or sent_at >= period_max:
                 continue
             messages.append(
                 MessageMetadata(
