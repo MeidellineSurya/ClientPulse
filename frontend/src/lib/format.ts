@@ -23,14 +23,6 @@ export function riskTier(score: number | null): RiskTier {
   return "healthy"
 }
 
-// Solid fills (not tints) so these badges stay visible on top of severity-tinted card backgrounds.
-export const severityStyles: Record<string, string> = {
-  low: "bg-neutral-300 text-neutral-800",
-  medium: "bg-watch text-ground",
-  high: "bg-risk text-ground",
-  critical: "bg-accent text-ground",
-}
-
 // Mirrors backend HIGHER_IS_WORSE — meetings_scheduled is the odd one out, a drop is the risk direction.
 export const HIGHER_IS_WORSE: Partial<Record<string, boolean>> = {
   avg_response_time_hours: true,
