@@ -9,10 +9,11 @@ plain-language brief *after* this module has already decided the number.
                             [normalized/clipped to 0-1]
 
     composite_risk =
-        0.35 x drift(response_time)          # top churn cause: poor communication
-      + 0.30 x drift(meeting_cancellations)
-      + 0.20 x drift(payment_lag)
-      + 0.15 x drift(meeting_frequency_decline)
+        0.30 x drift(response_time)          # top churn cause: poor communication
+      + 0.25 x drift(meeting_cancellations)
+      + 0.20 x drift(contact_turnover)       # new point of contact on the account
+      + 0.15 x drift(payment_lag)
+      + 0.10 x drift(meeting_frequency_decline)
 
 All I/O (Supabase reads/writes) lives in scoring_repo.py — everything here
 is pure and unit-testable without a database.
@@ -23,15 +24,20 @@ from dataclasses import dataclass, field
 from app.services.baseline_engine import (
     TRACKED_SIGNALS,
     compute_baselines,
+    derive_contact_changed,
     split_baseline_and_trend_windows,
 )
 
-# Weights sum to 1.0, taken directly from HANDOFF.md's stated formula.
+# Weights sum to 1.0. The original four are HANDOFF.md's stated formula;
+# contact_changed was added later (see baseline_engine.derive_contact_changed)
+# and the rest reweighted down proportionally to make room for it, rather
+# than bolting it on as a sixth, over-100% term.
 SIGNAL_WEIGHTS = {
-    "avg_response_time_hours": 0.35,
-    "meetings_cancelled": 0.30,
-    "invoice_days_late": 0.20,
-    "meetings_scheduled": 0.15,  # meeting *frequency decline* — see HIGHER_IS_WORSE
+    "avg_response_time_hours": 0.30,
+    "meetings_cancelled": 0.25,
+    "invoice_days_late": 0.15,
+    "meetings_scheduled": 0.10,  # meeting *frequency decline* — see HIGHER_IS_WORSE
+    "contact_changed": 0.20,
 }
 
 # Whether a larger raw value is the "worse" direction for that signal.
@@ -42,6 +48,7 @@ HIGHER_IS_WORSE = {
     "meetings_cancelled": True,
     "invoice_days_late": True,
     "meetings_scheduled": False,
+    "contact_changed": True,
 }
 
 # A z-score at or beyond this is treated as "fully" at-risk for that signal
@@ -189,6 +196,7 @@ def score_account_history(history: list[dict]) -> AccountScoringResult:
     baseline forward period by period — a deliberate hackathon-scope
     simplification, not a per-period lookback.
     """
+    history = derive_contact_changed(history)
     baseline_window, trend_window = split_baseline_and_trend_windows(history)
     baselines = compute_baselines(baseline_window)
 

@@ -9,12 +9,24 @@ single account's history and nothing else.
 
 from statistics import fmean, stdev
 
-TRACKED_SIGNALS = [
+# Raw signal_snapshot columns — fetched straight from the database, one
+# value per period.
+RAW_SIGNAL_COLUMNS = [
     "avg_response_time_hours",
     "meetings_cancelled",
     "invoice_days_late",
     "meetings_scheduled",
 ]
+
+# Not a raw column — derived from primary_contact_email by
+# derive_contact_changed below. A stakeholder change is one of the
+# strongest churn predictors in agency relationships, but unlike the
+# signals above it's a discrete event, not a continuously drifting
+# quantity, so it has to be turned into a number before it can be baselined
+# the same way.
+CONTACT_CHANGED_SIGNAL = "contact_changed"
+
+TRACKED_SIGNALS = RAW_SIGNAL_COLUMNS + [CONTACT_CHANGED_SIGNAL]
 
 # Most-recent periods held out of the baseline and used for the
 # worsening-trend check instead — keeps the baseline from being polluted by
@@ -64,3 +76,28 @@ def compute_baselines(baseline_window: list[dict]) -> dict[str, tuple[float, flo
         values = [float(row[signal]) for row in baseline_window if row.get(signal) is not None]
         baselines[signal] = mean_stddev(values)
     return baselines
+
+
+def derive_contact_changed(history: list[dict]) -> list[dict]:
+    """Adds a `contact_changed` (0/1) key to each period-ordered (oldest
+    first) history row, by comparing its `primary_contact_email` to the
+    previous row's — turns a discrete stakeholder-change event into a
+    number the same drift/baseline machinery as every other signal can
+    consume.
+
+    The first row always gets 0: there's no prior period to compare
+    against. A missing/unknown email (None — e.g. a period ingested before
+    this field existed) never counts as a change on its own; only a
+    transition between two known, different emails does, so incomplete
+    history can't manufacture a false positive.
+
+    Returns new dicts — the input rows are not mutated.
+    """
+    result = []
+    previous_email = None
+    for i, row in enumerate(history):
+        email = row.get("primary_contact_email")
+        changed = 1 if (i > 0 and previous_email is not None and email is not None and email != previous_email) else 0
+        result.append({**row, CONTACT_CHANGED_SIGNAL: changed})
+        previous_email = email
+    return result
