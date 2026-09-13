@@ -159,11 +159,31 @@ drift_score(signal) = (current_value - baseline_avg) / baseline_stddev
                         [normalized/clipped to 0–1]
 
 composite_risk =
-    0.35 × drift(response_time)          # top churn cause: poor communication
-  + 0.30 × drift(meeting_cancellations)
-  + 0.20 × drift(payment_lag)
-  + 0.15 × drift(meeting_frequency_decline)
+    0.30 × drift(response_time)          # top churn cause: poor communication
+  + 0.25 × drift(meeting_cancellations)
+  + 0.20 × drift(contact_turnover)       # new point of contact on the account
+  + 0.15 × drift(payment_lag)
+  + 0.10 × drift(meeting_frequency_decline)
 ```
+
+`contact_turnover` was added after the original four (§5.1) — a new point
+of contact taking over an account is one of the strongest churn predictors
+in agency relationships, and unlike the other four it's a discrete event
+(did the contact email change this period?) rather than a continuously
+drifting quantity. It's derived, not a raw `signal_snapshot` column — see
+`app/services/baseline_engine.py::derive_contact_changed` — and the other
+four weights were reweighted down proportionally to make room for it
+rather than letting the total exceed 1.0.
+
+### 5.1 Signal reference
+
+| Signal | Weight | Source | Direction |
+|---|---|---|---|
+| `avg_response_time_hours` | 0.30 | Gmail metadata | higher = worse |
+| `meetings_cancelled` | 0.25 | Calendar | higher = worse |
+| `contact_changed` | 0.20 | derived from `signal_snapshot.primary_contact_email` | any change = worse |
+| `invoice_days_late` | 0.15 | CSV invoice ingest | higher = worse |
+| `meetings_scheduled` | 0.10 | Calendar | *lower* = worse (frequency decline) |
 
 An alert only fires when `composite_risk` crosses threshold **and** the
 trend over the last 3 periods is worsening — a single bad week should not
@@ -177,6 +197,14 @@ dashboard.
 See `supabase/schema.sql` for the authoritative version. Six tables:
 `agency`, `account`, `signal_snapshot`, `baseline`, `health_score`, `alert`.
 Full field list is in the PRD (§6) if the schema file isn't in front of you.
+
+`signal_snapshot.primary_contact_email` (added in
+`supabase/migrations/20260913_contact_turnover_signal.sql`) stamps the
+account's *current* contact onto each period as it's ingested — it's how
+`contact_changed` (§5.1) detects a stakeholder change between periods.
+**Any already-provisioned Supabase project needs that migration applied**
+before deploying a backend built off this branch or later, the same as the
+alert-brief-persistence migration before it.
 
 ## 7. Decisions already made (don't relitigate mid-build)
 

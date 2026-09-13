@@ -160,6 +160,7 @@ async def ingest_gmail_calendar(
         email_thread_count,
         meetings_scheduled,
         meetings_cancelled,
+        primary_contact_email=contact_email,
     )
 
     return GmailCalendarIngestResult(

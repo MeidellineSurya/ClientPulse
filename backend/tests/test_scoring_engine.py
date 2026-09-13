@@ -52,12 +52,14 @@ def test_compute_composite_risk_hits_full_scale_when_every_signal_is_maximally_d
         "meetings_cancelled": (0.0, 0.01),
         "invoice_days_late": (0.0, 0.01),
         "meetings_scheduled": (5.0, 0.01),
+        "contact_changed": (0.0, 0.01),
     }
     current = {
         "avg_response_time_hours": 100.0,
         "meetings_cancelled": 100.0,
         "invoice_days_late": 100.0,
         "meetings_scheduled": 0.0,
+        "contact_changed": 1.0,
     }
     score, drifts = compute_composite_risk(current, baselines)
     assert score == 100.0
@@ -138,13 +140,20 @@ def test_compute_signal_contributions_sums_to_roughly_a_hundred():
 
 
 def test_compute_signal_contributions_single_dominant_signal_is_one_hundred_percent():
-    drifts = {"avg_response_time_hours": 1.0, "meetings_cancelled": 0.0, "invoice_days_late": 0.0, "meetings_scheduled": 0.0}
+    drifts = {
+        "avg_response_time_hours": 1.0,
+        "meetings_cancelled": 0.0,
+        "invoice_days_late": 0.0,
+        "meetings_scheduled": 0.0,
+        "contact_changed": 0.0,
+    }
     contributions = compute_signal_contributions(drifts)
     assert contributions == {
         "avg_response_time_hours": 100.0,
         "meetings_cancelled": 0.0,
         "invoice_days_late": 0.0,
         "meetings_scheduled": 0.0,
+        "contact_changed": 0.0,
     }
 
 
@@ -215,6 +224,37 @@ def test_score_account_history_worsening_account_fires_alert():
     # be the top (or tied-top) contributor to the score's explanation.
     assert round(sum(result.signal_contributions.values()), 0) == 100
     assert result.signal_contributions["avg_response_time_hours"] == max(result.signal_contributions.values())
+
+
+def test_score_account_history_contact_turnover_alone_is_not_enough_to_fire():
+    # A stakeholder change with every other signal stable contributes at
+    # most its own weight (0.20 -> 20 points) — below RISK_ALERT_THRESHOLD,
+    # by design: one signal alone should not fire an alert. It should still
+    # show up as real, nonzero drift, not get silently dropped.
+    history = _stable_history()
+    history[-1]["primary_contact_email"] = "new@example.com"
+    for row in history[:-1]:
+        row["primary_contact_email"] = "old@example.com"
+
+    result = score_account_history(history)
+    assert result.alert_fired is False
+    assert result.drifts["contact_changed"] == 1.0
+    assert result.composite_score == 20.0
+
+
+def test_score_account_history_contact_turnover_joins_an_existing_worsening_alert():
+    # Combined with an already-worsening account, the new contact should
+    # show up alongside the other drivers in signals_fired — the alert
+    # reflects everything currently contributing, not just the original
+    # cause (mirrors upsert_alert's signals_fired-refresh behavior).
+    history = _worsening_history()
+    for row in history[:-1]:
+        row["primary_contact_email"] = "old@example.com"
+    history[-1]["primary_contact_email"] = "new@example.com"
+
+    result = score_account_history(history)
+    assert result.alert_fired is True
+    assert "contact_changed" in result.signals_fired
 
 
 def test_score_account_history_handles_short_history_without_crashing():

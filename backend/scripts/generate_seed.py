@@ -42,6 +42,12 @@ ACCOUNT_NAMES = [
 # 0-indexed positions in ACCOUNT_NAMES that get a baked-in worsening trend.
 WORSENING_INDEXES = {2, 7, 12}  # Bluepeak Media, Anchor & Ives, Solstice Creative Group
 
+# Of the worsening accounts, this one also gets a new point of contact in
+# its final period — on top of its existing signal drift, so the demo shows
+# contact_changed joining signals_fired on an account that already alerts,
+# rather than needing its own scenario to prove the signal works at all.
+CONTACT_TURNOVER_INDEXES = {7}  # Anchor & Ives
+
 WEEKS = 8
 
 
@@ -62,17 +68,34 @@ def sql_str(value: str) -> str:
     return "'" + value.replace("'", "''") + "'"
 
 
+CONTACT_FIRST_NAMES = ["Alex", "Jordan", "Sam", "Taylor", "Morgan", "Casey", "Riley", "Jamie"]
+CONTACT_LAST_NAMES = ["Reed", "Kim", "Patel", "Nguyen", "Ortiz", "Chen", "Brooks", "Diaz"]
+
+
 def build_accounts(rng: random.Random, agency_id: str) -> list[dict]:
     # Builds the 15 mock account records: contract terms, start date, and a
-    # fake primary contact email derived from the account name.
+    # fake primary contact email derived from the account name. Accounts in
+    # CONTACT_TURNOVER_INDEXES get two contact identities — the original
+    # (used for early periods) and a new one (used from the turnover period
+    # onward) — with the account record itself always reflecting the
+    # *current* contact, matching how a real account would look after a
+    # stakeholder change.
     accounts = []
-    for name in ACCOUNT_NAMES:
+    for idx, name in enumerate(ACCOUNT_NAMES):
         contract_value = rng.choice([3000, 4500, 6000, 7500, 8500, 10000, 12500, 15000, 18000, 22000, 25000])
         days_ago = rng.randint(120, 900)
         contract_start = date.today() - timedelta(days=days_ago)
-        contact_first = rng.choice(["Alex", "Jordan", "Sam", "Taylor", "Morgan", "Casey", "Riley", "Jamie"])
-        contact_last = rng.choice(["Reed", "Kim", "Patel", "Nguyen", "Ortiz", "Chen", "Brooks", "Diaz"])
+        contact_first = rng.choice(CONTACT_FIRST_NAMES)
+        contact_last = rng.choice(CONTACT_LAST_NAMES)
         slug = slugify(name)
+        original_email = f"{contact_first.lower()}.{contact_last.lower()}@{slug}.com"
+
+        new_email = None
+        if idx in CONTACT_TURNOVER_INDEXES:
+            new_first = rng.choice([n for n in CONTACT_FIRST_NAMES if n != contact_first])
+            new_last = rng.choice([n for n in CONTACT_LAST_NAMES if n != contact_last])
+            new_email = f"{new_first.lower()}.{new_last.lower()}@{slug}.com"
+
         accounts.append(
             {
                 "id": stable_uuid("account", name),
@@ -80,7 +103,9 @@ def build_accounts(rng: random.Random, agency_id: str) -> list[dict]:
                 "name": name,
                 "contract_value_monthly": contract_value,
                 "contract_start_date": contract_start.isoformat(),
-                "primary_contact_email": f"{contact_first.lower()}.{contact_last.lower()}@{slug}.com",
+                "primary_contact_email": new_email or original_email,
+                "_original_contact_email": original_email,
+                "_new_contact_email": new_email,
             }
         )
     return accounts
@@ -113,9 +138,17 @@ def build_snapshots(rng: random.Random, account: dict, worsening: bool, periods:
     base_meetings_cancelled = rng.choice([0, 0, 0, 1])
     base_invoice_days_late = rng.choice([0, 0, 1, 2])
 
+    original_email = account["_original_contact_email"]
+    new_email = account.get("_new_contact_email")
+
     snapshots = []
     n = len(periods)
     for week_idx, (start, end) in enumerate(periods):
+        # The new contact only shows up in the final period — "just
+        # happened" — so it lands inside the 3-period trend window and
+        # shows up in that alert's signals_fired.
+        contact_email = new_email if (new_email and week_idx == n - 1) else original_email
+
         if worsening:
             # progress goes 0 -> 1 across the window, with an exponent >1 so
             # the drift accelerates rather than growing linearly (worse in
@@ -147,12 +180,19 @@ def build_snapshots(rng: random.Random, account: dict, worsening: bool, periods:
                 "meetings_scheduled": int(meetings_scheduled),
                 "meetings_cancelled": int(meetings_cancelled),
                 "invoice_days_late": int(invoice_days_late),
+                "primary_contact_email": contact_email,
             }
         )
     return snapshots
 
 
-def render_sql(agency_id: str, accounts: list[dict], snapshots_by_account: dict[str, list[dict]], worsening_names: list[str]) -> str:
+def render_sql(
+    agency_id: str,
+    accounts: list[dict],
+    snapshots_by_account: dict[str, list[dict]],
+    worsening_names: list[str],
+    turnover_names: list[str],
+) -> str:
     # Renders the generated data as a single SQL script with a header
     # comment, one multi-row INSERT for accounts, and one for signal_snapshot.
     lines = [
@@ -162,6 +202,10 @@ def render_sql(agency_id: str, accounts: list[dict], snapshots_by_account: dict[
         "--",
         "-- Accounts with a baked-in worsening trend (for demo/alerting):",
         *[f"--   - {name}" for name in worsening_names],
+        "--",
+        "-- Of those, this one also gets a new point of contact in its final",
+        "-- period, so its alert's signals_fired includes contact_changed:",
+        *[f"--   - {name}" for name in turnover_names],
         "--",
         "-- Not idempotent: re-running this against a database that already has",
         "-- StudioCo will insert a duplicate copy. To re-seed from scratch first run:",
@@ -192,13 +236,13 @@ def render_sql(agency_id: str, accounts: list[dict], snapshots_by_account: dict[
     # Build one VALUES row per (account, week) signal_snapshot.
     lines.append(
         "insert into signal_snapshot (id, account_id, period_start, period_end, avg_response_time_hours, "
-        "email_thread_count, meetings_scheduled, meetings_cancelled, invoice_days_late) values"
+        "email_thread_count, meetings_scheduled, meetings_cancelled, invoice_days_late, primary_contact_email) values"
     )
     snapshot_rows = []
     for account in accounts:
         for s in snapshots_by_account[account["id"]]:
             snapshot_rows.append(
-                "  ({id}, {account_id}, {start}, {end}, {resp}, {threads}, {sched}, {cancelled}, {late})".format(
+                "  ({id}, {account_id}, {start}, {end}, {resp}, {threads}, {sched}, {cancelled}, {late}, {email})".format(
                     id=sql_str(s["id"]),
                     account_id=sql_str(s["account_id"]),
                     start=sql_str(s["period_start"]),
@@ -208,6 +252,7 @@ def render_sql(agency_id: str, accounts: list[dict], snapshots_by_account: dict[
                     sched=s["meetings_scheduled"],
                     cancelled=s["meetings_cancelled"],
                     late=s["invoice_days_late"],
+                    email=sql_str(s["primary_contact_email"]),
                 )
             )
     lines.append(",\n".join(snapshot_rows) + ";")
@@ -231,13 +276,16 @@ def main() -> None:
 
     snapshots_by_account = {}
     worsening_names = []
+    turnover_names = []
     for idx, account in enumerate(accounts):
         worsening = idx in WORSENING_INDEXES
         if worsening:
             worsening_names.append(account["name"])
+        if idx in CONTACT_TURNOVER_INDEXES:
+            turnover_names.append(account["name"])
         snapshots_by_account[account["id"]] = build_snapshots(rng, account, worsening, periods)
 
-    sql = render_sql(agency_id, accounts, snapshots_by_account, worsening_names)
+    sql = render_sql(agency_id, accounts, snapshots_by_account, worsening_names, turnover_names)
 
     # Write to supabase/seed.sql relative to the repo root (two levels up
     # from backend/scripts/).

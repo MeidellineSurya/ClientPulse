@@ -61,7 +61,7 @@ def test_recompute_account_score_stable_account_does_not_fire_alert():
     assert body["alert_fired"] is False
     assert fake_client._tables["health_score"][0]["account_id"] == "acc-1"
     assert fake_client._tables.get("alert", []) == []  # no alert row written
-    assert len(fake_client._tables["baseline"]) == 4  # one row per tracked signal
+    assert len(fake_client._tables["baseline"]) == 5  # one row per tracked signal
 
 
 def test_recompute_account_score_worsening_account_fires_alert_and_persists_it():
@@ -84,10 +84,11 @@ def test_recompute_account_score_worsening_account_fires_alert_and_persists_it()
     assert len(fake_client._tables["alert"]) == 1
     assert fake_client._tables["alert"][0]["account_id"] == "acc-1"
     assert round(sum(body["signal_contributions"].values()), 0) == 100
-    # composite_score should be near the top of the scale for this fixture
-    # (see test_scoring_engine.py's equivalent), so revenue_at_risk should
-    # be close to the full annualized contract value ($120,000).
-    assert body["revenue_at_risk"] > 100000
+    # This fixture has no primary_contact_email data, so contact_changed
+    # (weight 0.20) never drifts — the other four signals maxing out caps
+    # composite_score at 80, not 100. revenue_at_risk should be close to
+    # that share of the full annualized contract value ($120,000 x 0.8).
+    assert body["revenue_at_risk"] > 90000
 
 
 def test_recompute_account_score_with_no_contract_value_on_record_reports_zero_risk():
