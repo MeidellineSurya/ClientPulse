@@ -45,7 +45,11 @@ export function Alerts() {
     setUpdatingId(alert.id)
     try {
       const updated = await api.setAlertStatus(alert.id, nextStatus)
-      setAlerts((prev) => prev?.map((a) => (a.id === alert.id ? updated : a)) ?? null)
+      setAlerts((prev) =>
+        prev?.map((a) =>
+          a.id === alert.id ? { ...updated, account_name: updated.account_name ?? a.account_name } : a,
+        ) ?? null,
+      )
       setJustUpdatedId(alert.id)
       window.setTimeout(() => setJustUpdatedId((id) => (id === alert.id ? null : id)), 900)
     } catch (err) {

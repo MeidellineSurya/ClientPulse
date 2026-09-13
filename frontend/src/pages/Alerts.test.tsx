@@ -6,6 +6,7 @@ import { afterEach, expect, it, vi } from "vitest"
 
 const api = vi.hoisted(() => ({
   listAlerts: vi.fn(),
+  listAccounts: vi.fn(),
   setAlertStatus: vi.fn(),
 }))
 
@@ -36,6 +37,7 @@ afterEach(() => {
 
 it("keeps the account name visible after an alert is acknowledged then resolved", async () => {
   api.listAlerts.mockResolvedValue([initialAlert])
+  api.listAccounts.mockResolvedValue([])
   api.setAlertStatus
     .mockResolvedValueOnce({ ...initialAlert, account_name: null, status: "acknowledged" })
     .mockResolvedValueOnce({ ...initialAlert, account_name: null, status: "resolved" })
@@ -48,12 +50,12 @@ it("keeps the account name visible after an alert is acknowledged then resolved"
 
   expect(await screen.findByRole("link", { name: "Acme" })).toBeTruthy()
 
-  fireEvent.click(screen.getByRole("button", { name: "Mark Acknowledged" }))
-  expect(await screen.findByRole("button", { name: "Mark Resolved" })).toBeTruthy()
+  fireEvent.click(screen.getByRole("button", { name: "Acknowledge" }))
+  expect(await screen.findByRole("button", { name: "Resolve" })).toBeTruthy()
   expect(screen.getByRole("link", { name: "Acme" })).toBeTruthy()
 
-  fireEvent.click(screen.getByRole("button", { name: "Mark Resolved" }))
-  expect(await screen.findByText("Resolved")).toBeTruthy()
+  fireEvent.click(screen.getByRole("button", { name: "Resolve" }))
+  expect(await screen.findByLabelText("Alert status: Resolved")).toBeTruthy()
   expect(screen.getByRole("link", { name: "Acme" })).toBeTruthy()
   expect(screen.queryByText(ACCOUNT_ID)).toBeNull()
 })

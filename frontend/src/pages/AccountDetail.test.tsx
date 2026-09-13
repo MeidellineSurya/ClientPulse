@@ -105,7 +105,7 @@ it("renders real contact transitions as a three-event graph beside every numeric
   expect(screen.getByText("3 changes across 26 reporting periods")).toBeTruthy()
   expect(screen.getByLabelText("Contact change events over time")).toBeTruthy()
   expect(screen.getAllByTestId("contact-event-marker")).toHaveLength(3)
-  expect(screen.getByText("Email Thread Count")).toBeTruthy()
+  expect(screen.getAllByText("Email Thread Count")).toHaveLength(2)
   expect(screen.getByText(/first@acme.com → second@acme.com/)).toBeTruthy()
   expect(screen.getByText(/third@acme.com → fourth@acme.com/)).toBeTruthy()
   const chartLines = screen.getAllByTestId("chart-line")
