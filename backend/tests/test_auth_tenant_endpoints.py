@@ -433,13 +433,44 @@ def test_google_ingestion_rejects_cross_agency_account_before_google_access(
     )
     app.dependency_overrides[require_supabase_client] = lambda: fake
 
-    def unexpected_google_access():
+    def unexpected_google_access(_agency_id):
         raise AssertionError("Google credentials must not be touched")
 
     monkeypatch.setattr(ingest, "get_google_credentials", unexpected_google_access)
     try:
         response = TestClient(app).post(
             f"/ingest/gmail-calendar/{hidden_id}",
+            headers={"Authorization": "Bearer valid-token"},
+        )
+    finally:
+        app.dependency_overrides.pop(require_supabase_client, None)
+
+    assert response.status_code == 404
+
+
+def test_google_credentials_are_bound_to_the_authenticated_agency(monkeypatch):
+    from app.config import settings
+
+    account_id = "22222222-2222-4222-8222-222222222222"
+    fake = _client_with_auth(
+        {
+            "agency_member": [{"user_id": "user-a", "agency_id": "agency-a"}],
+            "account": [
+                {
+                    "id": account_id,
+                    "agency_id": "agency-a",
+                    "primary_contact_email": "owner@example.com",
+                }
+            ],
+        },
+        _FakeAuth(user_id="user-a"),
+    )
+    monkeypatch.setattr(settings, "google_agency_id", "agency-b", raising=False)
+    app.dependency_overrides[require_supabase_client] = lambda: fake
+
+    try:
+        response = TestClient(app).post(
+            f"/ingest/gmail-calendar/{account_id}",
             headers={"Authorization": "Bearer valid-token"},
         )
     finally:

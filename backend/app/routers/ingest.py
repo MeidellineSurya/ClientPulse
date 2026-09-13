@@ -15,6 +15,7 @@ from httplib2 import HttpLib2Error
 
 from app.auth import AuthContext, require_auth_context
 from app.google_client import (
+    GoogleIntegrationNotFound,
     get_calendar_service,
     get_gmail_service,
     get_google_credentials,
@@ -116,13 +117,17 @@ async def ingest_gmail_calendar(
         raise HTTPException(status_code=404, detail="account not found")
 
     try:
-        credentials = get_google_credentials()
+        credentials = get_google_credentials(auth.agency_id)
         gmail_service = get_gmail_service(credentials)
         calendar_service = get_calendar_service(credentials)
         messages = fetch_message_metadata(
             gmail_service, contact_email, period_start, period_end
         )
         events = fetch_events(calendar_service, contact_email, period_start, period_end)
+    except GoogleIntegrationNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail="Google integration not found"
+        ) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except GoogleAuthError as exc:

@@ -39,7 +39,7 @@ def test_gmail_calendar_ingestion_writes_computed_live_signals(monkeypatch):
         }
     )
     app.dependency_overrides[require_auth_context] = lambda: authenticated_context(fake)
-    monkeypatch.setattr(ingest, "get_google_credentials", lambda: object())
+    monkeypatch.setattr(ingest, "get_google_credentials", lambda _agency_id: object())
     monkeypatch.setattr(ingest, "get_gmail_service", lambda _credentials: object())
     monkeypatch.setattr(ingest, "get_calendar_service", lambda _credentials: object())
     monkeypatch.setattr(
@@ -149,7 +149,7 @@ def test_gmail_calendar_returns_503_when_google_oauth_refresh_fails(monkeypatch)
     fake = _client_with_account()
     app.dependency_overrides[require_auth_context] = lambda: authenticated_context(fake)
 
-    def fail_credentials():
+    def fail_credentials(_agency_id):
         raise RefreshError("refresh token was rejected")
 
     monkeypatch.setattr(ingest, "get_google_credentials", fail_credentials)
@@ -171,7 +171,7 @@ def test_gmail_calendar_returns_503_when_google_oauth_transport_fails(monkeypatc
     fake = _client_with_account()
     app.dependency_overrides[require_auth_context] = lambda: authenticated_context(fake)
 
-    def fail_credentials():
+    def fail_credentials(_agency_id):
         raise TransportError("token endpoint unavailable")
 
     monkeypatch.setattr(ingest, "get_google_credentials", fail_credentials)
@@ -192,7 +192,7 @@ def test_gmail_calendar_returns_503_when_google_oauth_transport_fails(monkeypatc
 def test_gmail_calendar_returns_502_when_google_api_request_fails(monkeypatch):
     fake = _client_with_account()
     app.dependency_overrides[require_auth_context] = lambda: authenticated_context(fake)
-    monkeypatch.setattr(ingest, "get_google_credentials", lambda: object())
+    monkeypatch.setattr(ingest, "get_google_credentials", lambda _agency_id: object())
     monkeypatch.setattr(ingest, "get_gmail_service", lambda _credentials: object())
     monkeypatch.setattr(ingest, "get_calendar_service", lambda _credentials: object())
 
@@ -215,7 +215,7 @@ def test_gmail_calendar_returns_502_when_google_api_request_fails(monkeypatch):
 def test_gmail_calendar_returns_502_when_google_transport_fails(monkeypatch):
     fake = _client_with_account()
     app.dependency_overrides[require_auth_context] = lambda: authenticated_context(fake)
-    monkeypatch.setattr(ingest, "get_google_credentials", lambda: object())
+    monkeypatch.setattr(ingest, "get_google_credentials", lambda _agency_id: object())
     monkeypatch.setattr(ingest, "get_gmail_service", lambda _credentials: object())
     monkeypatch.setattr(ingest, "get_calendar_service", lambda _credentials: object())
 

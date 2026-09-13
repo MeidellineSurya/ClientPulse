@@ -54,9 +54,11 @@ refresh token must carry only these scopes:
 - `https://www.googleapis.com/auth/gmail.metadata`
 - `https://www.googleapis.com/auth/calendar.readonly`
 
-Configure `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REFRESH_TOKEN` in
-`backend/.env`. Obtain the refresh token with offline access and explicit consent for
-exactly the two scopes above; do not commit or print it. The Gmail API forbids its
+Configure `GOOGLE_AGENCY_ID`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and
+`GOOGLE_REFRESH_TOKEN` in `backend/.env`. `GOOGLE_AGENCY_ID` hard-binds that mailbox
+to one server-controlled agency; users in every other agency receive `404` before
+Google is contacted. Obtain the refresh token with offline access and explicit consent
+for exactly the two scopes above; do not commit or print it. The Gmail API forbids its
 server-side `q` filter under `gmail.metadata`, so the backend paginates metadata and
 filters exact participant addresses and UTC-normalized dates locally.
 

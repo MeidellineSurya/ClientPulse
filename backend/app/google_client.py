@@ -28,24 +28,34 @@ BODY_READING_GMAIL_SCOPES = frozenset(
 TOKEN_URI = "https://oauth2.googleapis.com/token"
 
 
-def _require_google_config() -> None:
+class GoogleIntegrationNotFound(RuntimeError):
+    """The deployment's Google mailbox is not assigned to this agency."""
+
+
+def _require_google_config(agency_id: str) -> None:
+    if not settings.google_agency_id:
+        raise RuntimeError(
+            "GOOGLE_AGENCY_ID must be set to bind Gmail/Calendar ingestion to an agency"
+        )
+    if agency_id != settings.google_agency_id:
+        raise GoogleIntegrationNotFound
     if not (
         settings.google_client_id
         and settings.google_client_secret
         and settings.google_refresh_token
     ):
         raise RuntimeError(
-            "GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and GOOGLE_REFRESH_TOKEN must be set "
-            "to pull Gmail/Calendar signals"
+            "GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and GOOGLE_REFRESH_TOKEN must "
+            "be set to pull Gmail/Calendar signals"
         )
 
 
 @lru_cache
-def get_google_credentials() -> Credentials:
+def get_google_credentials(agency_id: str) -> Credentials:
     # Cached like get_supabase_client — reused across requests instead of
     # re-authenticating every call. Credentials auto-refresh their access
     # token from the refresh token as needed.
-    _require_google_config()
+    _require_google_config(agency_id)
     credentials = Credentials(
         token=None,
         refresh_token=settings.google_refresh_token,

@@ -32,12 +32,18 @@ class Settings(BaseSettings):
     google_client_id: str = ""
     google_client_secret: str = ""
     google_refresh_token: str = ""
+    # Deployment-managed Google credentials are hard-bound to one agency.
+    google_agency_id: str = ""
 
     @property
     def cors_origins(self) -> list[str]:
         # Split the raw comma-separated env value into a clean list for
         # CORSMiddleware, dropping empty entries from stray commas/whitespace.
-        return [origin.strip() for origin in self.cors_allowed_origins.split(",") if origin.strip()]
+        return [
+            origin.strip()
+            for origin in self.cors_allowed_origins.split(",")
+            if origin.strip()
+        ]
 
 
 # Singleton settings instance, imported wherever config is needed.
