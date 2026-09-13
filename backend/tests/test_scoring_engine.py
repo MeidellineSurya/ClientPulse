@@ -257,6 +257,35 @@ def test_score_account_history_contact_turnover_joins_an_existing_worsening_aler
     assert "contact_changed" in result.signals_fired
 
 
+def test_score_account_history_contact_turnover_still_counts_a_few_periods_later():
+    # The contact changed at the start of the trend window, not the most
+    # recent period — it should still register today, exactly as if it had
+    # just happened, since a new contact from 2 periods ago is still a new
+    # contact now. Without the sticky-forward fix this drift/contribution
+    # would be silently zeroed out once a later period is scored.
+    history = _stable_history()
+    for row in history[:-3]:
+        row["primary_contact_email"] = "old@example.com"
+    for row in history[-3:]:
+        row["primary_contact_email"] = "new@example.com"
+
+    result = score_account_history(history)
+    assert result.drifts["contact_changed"] == 1.0
+    assert result.composite_score == 20.0
+
+
+def test_score_account_history_contact_turnover_from_a_few_periods_back_joins_an_existing_alert():
+    history = _worsening_history()
+    for row in history[:-3]:
+        row["primary_contact_email"] = "old@example.com"
+    for row in history[-3:]:
+        row["primary_contact_email"] = "new@example.com"
+
+    result = score_account_history(history)
+    assert result.alert_fired is True
+    assert "contact_changed" in result.signals_fired
+
+
 def test_score_account_history_handles_short_history_without_crashing():
     # Only 2 periods — falls back to using all of them for both windows;
     # a brand-new account should score as "no drift from itself" rather

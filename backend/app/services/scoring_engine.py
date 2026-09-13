@@ -200,6 +200,21 @@ def score_account_history(history: list[dict]) -> AccountScoringResult:
     baseline_window, trend_window = split_baseline_and_trend_windows(history)
     baselines = compute_baselines(baseline_window)
 
+    # contact_changed is a one-off event, not a continuously re-measured
+    # quantity like the other signals below — if it only counted on its
+    # exact period, a stakeholder change would be scored as risk for one
+    # week and then silently vanish, even though a new contact is still
+    # just as new the following week. Sticky-forward within the trend
+    # window so it keeps counting as "recent" until it ages out of scoring
+    # entirely, the same way a bad response-time week keeps affecting the
+    # score for as long as it's part of the current window.
+    sticky_trend_window = []
+    contact_changed_recently = False
+    for row in trend_window:
+        contact_changed_recently = contact_changed_recently or bool(row.get("contact_changed"))
+        sticky_trend_window.append({**row, "contact_changed": int(contact_changed_recently)})
+    trend_window = sticky_trend_window
+
     period_scores: list[float] = []
     latest_drifts: dict[str, float] = {}
     for row in trend_window:
