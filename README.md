@@ -78,7 +78,7 @@ clientpulse/
    port trusted at once.
 4. Sign in through the frontend, then hit
    `POST http://localhost:8000/score/recompute` once with the resulting Supabase
-   access token as `Authorization: Bearer <token>` to populate
+   access token as `Authorization: Bearer ACCESS_TOKEN` to populate
    `health_score`/`alert` rows. Otherwise the Portfolio page will show accounts
    with no score yet.
 5. `/score/recompute` only ever persists the *latest* period's score, even
@@ -145,10 +145,20 @@ and falls back rather than crashing.
       Account Detail, Alerts, Connections, all wired to the real backend,
       verified in an actual browser session. Per-account risk-score trend
       sparklines added to the accounts table, backed by `/accounts/:id/health-history`.
-- [x] Deployment — frontend live on Render, backend live on Vercel (Python
-      ASGI serverless), both verified end-to-end in a real browser session
-      against the actual production URLs
-- [x] Supabase Auth/RLS migration applied and the production StudioCo admin
-      membership bound; bearer-authenticated frontend/backend deployment is
-      pending merge and hosting environment configuration
+- [x] Authentication and agency isolation merged to `main`; the live Supabase
+      Auth/RLS migration is applied and the production StudioCo admin membership
+      is bound
+- [x] Authenticated backend deployed on Vercel and verified live: `/health`
+      remains public while `/accounts` and `/alerts` reject missing bearer tokens
+      with `401`
+- [ ] Deploy the merged frontend auth build to Render. Render is still serving
+      the older unauthenticated bundle and did not auto-deploy after the merge
+- [ ] Configure Render with `VITE_API_BASE_URL`, `VITE_SUPABASE_URL`, and
+      `VITE_SUPABASE_ANON_KEY` (never the service-role key)
+- [ ] Change Supabase Auth's Site URL from localhost to the production frontend,
+      allow its callback URLs, send a fresh password-recovery email, and verify
+      invite acceptance/password setup/login end to end
+- [ ] Configure the backend deployment's `GOOGLE_AGENCY_ID` before attempting
+      live Gmail/Calendar verification; Google access intentionally fails closed
+      while that binding is absent
 - [ ] Demo run-through rehearsed end to end
