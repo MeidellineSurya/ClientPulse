@@ -59,7 +59,7 @@ export function Accounts() {
         />
         <Segmented name="account-filter" options={FILTERS} value={filter} onChange={setFilter} />
         <div className="ml-auto text-[12.5px] text-neutral-700">
-          {rows.length} of {accounts?.length ?? 0} accounts
+          {accounts ? `${rows.length} of ${accounts.length} accounts` : "Loading accounts…"}
         </div>
       </div>
 

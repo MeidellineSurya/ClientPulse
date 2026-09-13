@@ -8,6 +8,7 @@ from app.auth import AuthContext, require_auth_context
 from app.schemas import (
     AccountDetail,
     AccountSummary,
+    ContactChangeEvent,
     HealthScorePoint,
     SignalSnapshotOut,
 )
@@ -15,9 +16,11 @@ from app.services.accounts_repo import (
     fetch_account,
     fetch_all_accounts,
     fetch_full_signal_history,
+    fetch_health_score_histories,
     fetch_health_score_history,
     fetch_latest_health_score,
     fetch_latest_health_scores,
+    fetch_signal_histories,
 )
 from app.services.alerts_repo import fetch_alerts_for_account
 from app.services.baseline_engine import derive_contact_changed
@@ -51,6 +54,34 @@ def list_accounts(
     ]
 
 
+@router.get("/signal-histories", response_model=dict[str, list[SignalSnapshotOut]])
+def list_signal_histories(
+    auth: AuthContext = Depends(require_auth_context),  # noqa: B008 - FastAPI dependency
+) -> dict[str, list[SignalSnapshotOut]]:
+    account_ids = [
+        account["id"] for account in fetch_all_accounts(auth.client, auth.agency_id)
+    ]
+    histories = fetch_signal_histories(auth.client, account_ids)
+    return {
+        account_id: [SignalSnapshotOut(**row) for row in rows]
+        for account_id, rows in histories.items()
+    }
+
+
+@router.get("/health-histories", response_model=dict[str, list[HealthScorePoint]])
+def list_health_histories(
+    auth: AuthContext = Depends(require_auth_context),  # noqa: B008 - FastAPI dependency
+) -> dict[str, list[HealthScorePoint]]:
+    account_ids = [
+        account["id"] for account in fetch_all_accounts(auth.client, auth.agency_id)
+    ]
+    histories = fetch_health_score_histories(auth.client, account_ids)
+    return {
+        account_id: [HealthScorePoint(**row) for row in rows]
+        for account_id, rows in histories.items()
+    }
+
+
 @router.get("/{account_id}", response_model=AccountDetail)
 def get_account_detail(
     account_id: UUID,
@@ -72,11 +103,23 @@ def get_account_detail(
     # contributed to that period's score (see HANDOFF.md §13).
     contact_changed_at = None
     previous_contact_email = None
+    contact_events = []
     annotated_history = derive_contact_changed(signal_history)
     for previous_row, row in zip(signal_history, annotated_history[1:]):
         if row["contact_changed"]:
+            prior_email = previous_row.get("primary_contact_email")
+            current_email = row.get("primary_contact_email")
+            if not prior_email or not current_email:
+                continue
             contact_changed_at = row["period_end"]
-            previous_contact_email = previous_row.get("primary_contact_email")
+            previous_contact_email = prior_email
+            contact_events.append(
+                ContactChangeEvent(
+                    period_end=row["period_end"],
+                    previous_contact_email=prior_email,
+                    current_contact_email=current_email,
+                )
+            )
 
     return AccountDetail(
         id=account["id"],
@@ -88,6 +131,7 @@ def get_account_detail(
         trend_slope=latest_score.get("trend_slope"),
         health_computed_at=latest_score.get("computed_at"),
         signal_history=[SignalSnapshotOut(**row) for row in signal_history],
+        contact_events=contact_events,
         alerts=alerts,
         contact_changed_at=contact_changed_at,
         previous_contact_email=previous_contact_email,

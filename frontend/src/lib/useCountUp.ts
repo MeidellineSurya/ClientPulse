@@ -1,28 +1,35 @@
 import { useEffect, useRef, useState } from "react"
 
-// Animates 0 -> value once on mount (cubic ease-out); jumps straight to value under prefers-reduced-motion.
+// Animates each newly loaded value from the value currently on screen. Delayed
+// API responses therefore restart the animation instead of leaving a completed
+// zero-value animation stuck forever.
 export function useCountUp(value: number, durationMs = 900): number {
   const [display, setDisplay] = useState(0)
-  const target = useRef(value)
-  target.current = value
+  const displayRef = useRef(0)
 
   useEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      setDisplay(target.current)
+    const setCurrent = (next: number) => {
+      displayRef.current = next
+      setDisplay(next)
+    }
+
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || durationMs <= 0) {
+      setCurrent(value)
       return
     }
+
     let frame: number
-    const start = performance.now()
+    const from = displayRef.current
+    const startedAt = performance.now()
     const tick = (now: number) => {
-      const t = Math.min(1, (now - start) / durationMs)
-      const eased = 1 - Math.pow(1 - t, 3)
-      setDisplay(target.current * eased)
-      if (t < 1) frame = requestAnimationFrame(tick)
+      const progress = Math.min(1, (now - startedAt) / durationMs)
+      const eased = 1 - Math.pow(1 - progress, 3)
+      setCurrent(from + (value - from) * eased)
+      if (progress < 1) frame = requestAnimationFrame(tick)
     }
     frame = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(frame)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [durationMs, value])
 
   return display
 }

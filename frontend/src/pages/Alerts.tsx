@@ -20,7 +20,7 @@ type Filter = (typeof FILTERS)[number]
 
 export function Alerts() {
   const [alerts, setAlerts] = useState<Alert[] | null>(null)
-  const [accounts, setAccounts] = useState<AccountSummary[]>([])
+  const [accounts, setAccounts] = useState<AccountSummary[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [updatingId, setUpdatingId] = useState<string | null>(null)
   const [justUpdatedId, setJustUpdatedId] = useState<string | null>(null)
@@ -36,16 +36,21 @@ export function Alerts() {
     })
   }, [])
 
-  const accountById = useMemo(() => new Map(accounts.map((a) => [a.id, a])), [accounts])
-  const accountIds = useMemo(() => accounts.map((a) => a.id), [accounts])
-  const signalHistories = useSignalHistories(accountIds)
+  const accountById = useMemo(() => new Map((accounts ?? []).map((a) => [a.id, a])), [accounts])
+  const accountIds = useMemo(() => accounts?.map((a) => a.id) ?? [], [accounts])
+  const { data: signalHistories, loading: signalHistoriesLoading } = useSignalHistories(accountIds)
+  const isLoading = !alerts || !accounts || signalHistoriesLoading
 
   async function updateStatus(alert: Alert, nextStatus: Alert["status"]) {
     if (nextStatus === alert.status) return
     setUpdatingId(alert.id)
     try {
       const updated = await api.setAlertStatus(alert.id, nextStatus)
-      setAlerts((prev) => prev?.map((a) => (a.id === alert.id ? updated : a)) ?? null)
+      setAlerts((prev) =>
+        prev?.map((a) =>
+          a.id === alert.id ? { ...updated, account_name: updated.account_name ?? a.account_name } : a,
+        ) ?? null,
+      )
       setJustUpdatedId(alert.id)
       window.setTimeout(() => setJustUpdatedId((id) => (id === alert.id ? null : id)), 900)
     } catch (err) {
@@ -91,9 +96,11 @@ export function Alerts() {
       </div>
 
       <div className="flex flex-col gap-4 px-10 pb-12 pt-5">
-        {!alerts && <Loading rows={4} />}
-        {alerts && shown.length === 0 && <EmptyState title="Queue clear" body="Nothing in this filter needs your attention right now." />}
-        {shown.map((alert, i) => {
+        {isLoading && <Loading rows={4} />}
+        {!isLoading && alerts && shown.length === 0 && (
+          <EmptyState title="Queue clear" body="Nothing in this filter needs your attention right now." />
+        )}
+        {!isLoading && shown.map((alert, i) => {
           const history = signalHistories[alert.account_id] ?? []
           return (
             <AlertCard

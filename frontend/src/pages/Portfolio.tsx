@@ -61,7 +61,7 @@ export function Portfolio() {
   const greeting = useMemo(() => getGreeting(), [])
   const GreetingIcon = greeting.icon
   const [accounts, setAccounts] = useState<AccountSummary[] | null>(null)
-  const [alerts, setAlerts] = useState<Alert[]>([])
+  const [alerts, setAlerts] = useState<Alert[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [updatingId, setUpdatingId] = useState<string | null>(null)
   const [justUpdatedId, setJustUpdatedId] = useState<string | null>(null)
@@ -83,7 +83,11 @@ export function Portfolio() {
     setUpdatingId(alert.id)
     try {
       const updated = await api.setAlertStatus(alert.id, nextStatus)
-      setAlerts((prev) => prev.map((a) => (a.id === alert.id ? updated : a)))
+      setAlerts((prev) =>
+        prev?.map((a) =>
+          a.id === alert.id ? { ...updated, account_name: updated.account_name ?? a.account_name } : a,
+        ) ?? null,
+      )
       setJustUpdatedId(alert.id)
       window.setTimeout(() => setJustUpdatedId((id) => (id === alert.id ? null : id)), 900)
     } catch (err) {
@@ -106,10 +110,10 @@ export function Portfolio() {
     [accounts],
   )
 
-  const openAlertsCount = useMemo(() => alerts.filter((a) => a.status === "open").length, [alerts])
+  const openAlertsCount = useMemo(() => (alerts ?? []).filter((a) => a.status === "open").length, [alerts])
   const signalCounts = useMemo(() => {
     const counts = new Map<string, number>(ALL_SIGNALS.map((signal) => [signal, 0]))
-    for (const alert of alerts) {
+    for (const alert of alerts ?? []) {
       for (const signal of alert.signals_fired) {
         counts.set(signal, (counts.get(signal) ?? 0) + 1)
       }
@@ -119,7 +123,7 @@ export function Portfolio() {
   const maxSignalCount = Math.max(1, signalCounts[0]?.[1] ?? 0)
 
   const accountIds = useMemo(() => accounts?.map((a) => a.id) ?? [], [accounts])
-  const signalHistories = useSignalHistories(accountIds)
+  const { data: signalHistories, loading: signalHistoriesLoading } = useSignalHistories(accountIds)
   const portfolioSignalTrends = useMemo(() => {
     const byPeriod = new Map<string, Partial<Record<keyof SignalSnapshot, { sum: number; count: number }>>>()
     for (const history of Object.values(signalHistories)) {
@@ -165,7 +169,7 @@ export function Portfolio() {
     return <div className="m-10 border border-risk px-4 py-3 text-[13px] text-risk-ink">Couldn't load accounts: {error}</div>
   }
 
-  if (!accounts) {
+  if (!accounts || !alerts) {
     return (
       <div className="p-10">
         <Loading rows={8} />
@@ -294,7 +298,10 @@ export function Portfolio() {
           </p>
 
           <div className="mt-5 flex flex-col">
-            {ALL_SIGNALS.map((signal) => {
+            {signalHistoriesLoading ? (
+              <Loading rows={5} />
+            ) : (
+              ALL_SIGNALS.map((signal) => {
               const count = signalCountMap.get(signal) ?? 0
               const trend = trendMap.get(signal)
               const direction = trend ? trendDirection(signal, trend.series) : "unknown"
@@ -350,7 +357,8 @@ export function Portfolio() {
                   </div>
                 </div>
               )
-            })}
+              })
+            )}
           </div>
         </div>
 

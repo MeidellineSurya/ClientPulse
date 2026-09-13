@@ -42,7 +42,9 @@ export const api = {
   listAccounts: () => request<AccountSummary[]>("/accounts"),
   getAccount: (id: string) => request<AccountDetail>(`/accounts/${id}`),
   getAccountSignals: (id: string) => request<SignalSnapshot[]>(`/accounts/${id}/signals`),
+  listSignalHistories: () => request<Record<string, SignalSnapshot[]>>("/accounts/signal-histories"),
   getAccountHealthHistory: (id: string) => request<HealthScorePoint[]>(`/accounts/${id}/health-history`),
+  listHealthHistories: () => request<Record<string, HealthScorePoint[]>>("/accounts/health-histories"),
   listAlerts: () => request<Alert[]>("/alerts"),
   setAlertStatus: (id: string, status: Alert["status"]) =>
     request<Alert>(`/alerts/${id}/status`, {

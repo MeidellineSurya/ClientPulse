@@ -20,6 +20,13 @@ export interface SignalSnapshot {
   meetings_cancelled: number
   invoice_days_late: number
   email_thread_count: number
+  primary_contact_email: string | null
+}
+
+export interface ContactChangeEvent {
+  period_end: string
+  previous_contact_email: string
+  current_contact_email: string
 }
 
 export interface HealthScorePoint {
@@ -50,6 +57,7 @@ export interface AccountDetail {
   trend_slope: number | null
   health_computed_at: string | null
   signal_history: SignalSnapshot[]
+  contact_events: ContactChangeEvent[]
   alerts: Alert[]
   contact_changed_at: string | null
   previous_contact_email: string | null
