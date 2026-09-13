@@ -26,6 +26,10 @@ notice lands.
 computed as sitting in the risk zone right now (2026-09-13, not a mockup —
 numbers move as scores get recomputed).
 
+**Demo login:**
+- Email: `joelprestong@gmail.com`
+- Password: `Forward2026`
+
 ## ✨ What it actually does
 
 - **Deterministic risk scoring, not a black box.** Every account is measured
