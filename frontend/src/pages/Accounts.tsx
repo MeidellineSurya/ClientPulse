@@ -52,7 +52,7 @@ export function Accounts() {
 
       <div className="flex flex-wrap items-center gap-3 border-b border-divider px-10 py-3.5">
         <input
-          className="max-w-[250px] border border-divider bg-transparent px-3 py-1.5 text-[13px] placeholder:text-neutral-600"
+          className="w-full max-w-[420px] flex-1 border border-divider bg-transparent px-3 py-1.5 text-[13px] placeholder:text-neutral-600"
           placeholder="Search clients"
           value={query}
           onChange={(e) => setQuery(e.target.value)}

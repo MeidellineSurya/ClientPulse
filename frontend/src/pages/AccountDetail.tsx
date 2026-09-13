@@ -2,38 +2,88 @@ import { useEffect, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
 import { Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 
+import { EmptyState } from "@/components/ui/EmptyState"
 import { Loading } from "@/components/ui/Loading"
 import { api, ApiError } from "@/lib/api"
-import { computeRevenueAtRisk, formatCurrency, formatDate, formatSignalName, riskTier, severityStyles } from "@/lib/format"
-import { cn, HEX, RISK_STYLES } from "@/lib/utils"
+import {
+  computeDataCoverage,
+  computeRevenueAtRisk,
+  formatCurrency,
+  formatDate,
+  formatSignalName,
+  formatSignalValue,
+  MIN_DATA_COVERAGE_DAYS,
+  riskTier,
+  severityStyles,
+  signalStatus,
+  SIGNAL_STATUS_TEXT,
+  TRACKED_SIGNALS,
+} from "@/lib/format"
+import { cn, HEX, nearestByDate, RISK_STYLES } from "@/lib/utils"
 import type { AccountDetail as AccountDetailType, HealthScorePoint, SignalSnapshot } from "@/types/api"
 
 const RISK_ALERT_THRESHOLD = 60 // mirrors backend/app/services/scoring_engine.py
 
-const TRACKED_SIGNALS: Array<keyof SignalSnapshot> = [
-  "avg_response_time_hours",
-  "meetings_cancelled",
-  "invoice_days_late",
-  "meetings_scheduled",
-]
-
 function SignalSparkline({ signal, history }: { signal: keyof SignalSnapshot; history: SignalSnapshot[] }) {
   const data = history.map((row) => ({ period: row.period_start, value: row[signal] as number }))
+  const allValues = data.map((d) => d.value)
+  const latest = data[data.length - 1]
+  const latestStatus = latest ? signalStatus(signal, latest.value, allValues) : null
+  const statusLabel = latestStatus === "bad" ? "Risk" : latestStatus === "watch" ? "Watch" : "Good"
+  const statusDotClass = latestStatus === "bad" ? "bg-risk" : latestStatus === "watch" ? "bg-watch" : "bg-healthy"
+
   return (
     <div className="border border-divider p-4">
-      <div className="kicker">{formatSignalName(signal)}</div>
-      <div className="mt-1 h-20 w-full">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 6, right: 4, bottom: 2, left: 4 }}>
-            <YAxis hide domain={["dataMin - 1", "dataMax + 1"]} />
-            <Tooltip
-              contentStyle={{ border: "1px solid rgba(32,30,29,0.4)", borderRadius: 0, background: "#f3f2f2", fontSize: 12 }}
-              labelFormatter={(label) => (typeof label === "string" ? formatDate(label) : String(label ?? ""))}
-              formatter={(value) => [String(value), formatSignalName(signal)]}
-            />
-            <Line type="monotone" dataKey="value" stroke={HEX.ink} strokeWidth={1.7} dot={false} />
-          </LineChart>
-        </ResponsiveContainer>
+      <div className="flex items-center justify-between gap-2">
+        <div className="kicker">{formatSignalName(signal)}</div>
+        {latestStatus && (
+          <span className={cn("flex items-center gap-1.5 text-[10.5px] font-extrabold uppercase tracking-[0.05em]", SIGNAL_STATUS_TEXT[latestStatus])}>
+            <span className={cn("size-1.5 flex-none", statusDotClass)} aria-hidden="true" />
+            {statusLabel}
+          </span>
+        )}
+      </div>
+      <div className="mt-2 h-28 w-full">
+        {data.length > 0 ? (
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={data} margin={{ top: 6, right: 8, bottom: 0, left: -12 }}>
+              <XAxis
+                dataKey="period"
+                tickFormatter={formatDate}
+                tick={{ fontSize: 10, fill: "#7d7979" }}
+                axisLine={false}
+                tickLine={false}
+                interval="preserveStartEnd"
+              />
+              <YAxis
+                domain={["dataMin - 1", "dataMax + 1"]}
+                tickFormatter={(v: number) => formatSignalValue(signal, v)}
+                tick={{ fontSize: 10, fill: "#7d7979" }}
+                axisLine={false}
+                tickLine={false}
+                width={40}
+              />
+              <Tooltip
+                contentStyle={{ border: "1px solid rgba(32,30,29,0.4)", borderRadius: 0, background: "#f3f2f2", fontSize: 12 }}
+                labelFormatter={(label) => (typeof label === "string" ? formatDate(label) : String(label ?? ""))}
+                formatter={(value) => [formatSignalValue(signal, value as number), formatSignalName(signal)]}
+              />
+              <Line
+                type="monotone"
+                dataKey="value"
+                stroke={HEX.ink}
+                strokeWidth={1.7}
+                dot={(props) => {
+                  const status = signalStatus(signal, props.value as number, allValues)
+                  const fill = status === "bad" ? HEX.risk : status === "watch" ? HEX.watch : HEX.healthy
+                  return <circle key={props.index} cx={props.cx} cy={props.cy} r={3} fill={fill} stroke="none" />
+                }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        ) : (
+          <p className="flex h-full items-center text-[12px] text-neutral-600">No signal history yet</p>
+        )}
       </div>
     </div>
   )
@@ -45,10 +95,12 @@ export function AccountDetail() {
   const [account, setAccount] = useState<AccountDetailType | null>(null)
   const [healthHistory, setHealthHistory] = useState<HealthScorePoint[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null)
 
   useEffect(() => {
     if (!id) return
     setAccount(null)
+    setHoveredIdx(null)
     api
       .getAccount(id)
       .then(setAccount)
@@ -73,12 +125,18 @@ export function AccountDetail() {
     )
   }
 
+  const coverage = computeDataCoverage(account.signal_history)
   const tier = riskTier(account.composite_score)
   const style = RISK_STYLES[tier]
   const revenueAtRisk = computeRevenueAtRisk(account.contract_value_monthly, account.composite_score)
   const latestAlertWithBrief = account.alerts.find((a) => a.ai_brief)
   const scoreHistoryData = healthHistory.map((p) => ({ date: p.computed_at, score: p.composite_score }))
   const statusLabel = tier === "risk" ? "At risk" : tier === "watch" ? "Watch" : tier === "unscored" ? "Unscored" : "Healthy"
+  const activePoint = healthHistory[hoveredIdx ?? healthHistory.length - 1] ?? null
+  const activeSnapshot = activePoint
+    ? nearestByDate(account.signal_history, activePoint.computed_at, (row) => row.period_start)
+    : null
+  const activeTier = activePoint ? riskTier(activePoint.composite_score) : tier
 
   return (
     <div>
@@ -91,13 +149,13 @@ export function AccountDetail() {
 
       <header className="rule px-10 pb-7 pt-8">
         <div className="flex flex-wrap items-start gap-10">
-          <div className="min-w-[280px] flex-1">
-            <h1 className="text-[40px] tracking-[-0.035em]">{account.name}</h1>
+          <div className="min-w-0 flex-1 sm:min-w-[280px]">
+            <h1 className="break-words text-[clamp(28px,6vw,40px)] tracking-[-0.035em]">{account.name}</h1>
             <div className="mt-1 text-[13.5px] text-neutral-700">
-              client since {formatDate(account.contract_start_date)} · {account.primary_contact_email ?? "no contact on file"}
+              Client since {formatDate(account.contract_start_date)} · {account.primary_contact_email ?? "no contact on file"}
             </div>
             {account.contact_changed_at && (
-              <div className="mt-2.5 inline-block border-l-4 border-accent-700 bg-accent-100 py-1.5 pl-3 pr-4 text-[12.5px]">
+              <div className="mt-2.5 inline-block bg-accent-100 px-3.5 py-1.5 text-[12.5px]">
                 <span className="font-extrabold uppercase tracking-[0.05em] text-accent-700">New point of contact</span>{" "}
                 as of {formatDate(account.contact_changed_at)}: {account.primary_contact_email}
                 {account.previous_contact_email && <> (was {account.previous_contact_email})</>}
@@ -105,81 +163,166 @@ export function AccountDetail() {
             )}
           </div>
 
-          <div className="flex items-stretch">
-            <div className={cn("border-l-4 pl-4 pr-7", style.borderLeft)}>
-              <div className="kicker">Risk score</div>
-              <div className={cn("text-[68px] font-extrabold leading-[0.92] tracking-[-0.05em]", style.text)}>
-                {account.composite_score !== null ? account.composite_score.toFixed(0) : "—"}
-              </div>
-              <div className={cn("text-[12.5px] font-extrabold uppercase tracking-[0.06em]", style.text)}>{statusLabel}</div>
-            </div>
+          <div className="flex flex-wrap items-stretch gap-y-5">
+            {coverage.isSufficient ? (
+              <>
+                <div className={cn("min-w-0 border-l-[3px] pl-4 pr-7", style.borderLeft)}>
+                  <div className="kicker">Risk score</div>
+                  <div className={cn("break-words text-[clamp(40px,8vw,68px)] font-extrabold leading-[0.92] tracking-[-0.05em] tabular-nums", style.text)}>
+                    {account.composite_score !== null ? account.composite_score.toFixed(0) : "—"}
+                  </div>
+                  <div className={cn("text-[12.5px] font-extrabold uppercase tracking-[0.06em]", style.text)}>{statusLabel}</div>
+                </div>
 
-            <div className="border-l border-divider pl-7">
-              <div className="kicker">Revenue at risk</div>
-              <div className="mt-1 text-[38px] font-extrabold leading-tight tracking-[-0.04em]">{formatCurrency(revenueAtRisk)}</div>
-              <div className="text-[13px] text-neutral-800">{formatCurrency(account.contract_value_monthly)}/mo contract</div>
-              <div className="mt-1.5 text-[12px] text-neutral-700">
-                {account.health_computed_at ? "Last scored " + formatDate(account.health_computed_at) : "Never scored"}
+                <div className="min-w-0 border-l border-divider pl-7">
+                  <div className="kicker">Revenue at risk</div>
+                  <div className="mt-1 break-words text-[clamp(24px,6vw,38px)] font-extrabold leading-tight tracking-[-0.04em] tabular-nums">
+                    {formatCurrency(revenueAtRisk)}
+                  </div>
+                  <div className="text-[13px] text-neutral-800">{formatCurrency(account.contract_value_monthly)}/mo contract</div>
+                  <div className="mt-1.5 text-[12px] text-neutral-700">
+                    {account.health_computed_at ? "Last scored " + formatDate(account.health_computed_at) : "Never scored"}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="min-w-0 border-l-[3px] border-l-neutral-400 pl-4">
+                <div className="kicker">Risk score</div>
+                <div className="text-[22px] font-extrabold leading-tight text-neutral-600">Collecting data</div>
+                <div className="mt-1 text-[12px] text-neutral-700">
+                  {coverage.days} of {MIN_DATA_COVERAGE_DAYS} days collected
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       </header>
 
-      <section className="rule px-10 pb-7 pt-6">
-        <h2 className="text-[17px]">Composite risk, over time</h2>
-        <p className="mb-3.5 text-[12.5px] text-neutral-700">Dashed line is the alert threshold ({RISK_ALERT_THRESHOLD}).</p>
-        <div className="h-[230px] w-full border border-divider bg-surface">
-          {scoreHistoryData.length > 0 ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={scoreHistoryData} margin={{ top: 16, right: 16, bottom: 8, left: -16 }}>
-                <XAxis dataKey="date" tickFormatter={formatDate} tick={{ fontSize: 11, fill: "#7d7979" }} axisLine={false} tickLine={false} />
-                <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: "#7d7979" }} axisLine={false} tickLine={false} />
-                <Tooltip
-                  contentStyle={{ border: "1px solid rgba(32,30,29,0.4)", borderRadius: 0, background: "#f3f2f2", fontSize: 12 }}
-                  labelFormatter={(label) => (typeof label === "string" ? formatDate(label) : String(label ?? ""))}
-                  formatter={(v) => [v, "Risk"]}
-                />
-                <ReferenceLine y={RISK_ALERT_THRESHOLD} stroke={HEX.accent} strokeDasharray="7 6" />
-                <Line type="monotone" dataKey="score" stroke={HEX[tier]} strokeWidth={2.4} dot={false} />
-              </LineChart>
-            </ResponsiveContainer>
-          ) : (
-            <p className="flex h-full items-center justify-center text-[13px] text-neutral-700">
-              No score history yet — run /score/recompute for this account.
+      {coverage.isSufficient ? (
+        <>
+          <section className="rule px-10 pb-7 pt-6">
+            <h2 className="text-[17px]">Composite risk, over time</h2>
+            <p className="mb-3.5 text-[12.5px] text-neutral-700">
+              Dashed line is the alert threshold ({RISK_ALERT_THRESHOLD}). Hover the line to see what was happening in that period.
             </p>
-          )}
-        </div>
-      </section>
-
-      <section className="px-10 pb-3 pt-6">
-        <h2 className="text-[17px]">Signal trends</h2>
-        <p className="mt-1 text-[12.5px] text-neutral-700">Raw signal values over each scored period.</p>
-      </section>
-      <section className="grid gap-4 px-10 pb-8 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
-        {TRACKED_SIGNALS.map((signal) => (
-          <SignalSparkline key={signal} signal={signal} history={account.signal_history} />
-        ))}
-      </section>
-
-      {latestAlertWithBrief && (
-        <section className="rule bg-surface px-10 pb-7 pt-6">
-          <div className="flex items-center gap-2">
-            <div className="text-[10.5px] font-extrabold uppercase tracking-[0.1em] text-accent-700">AI brief</div>
-            <span className={cn("px-2 py-[3px] text-[10.5px] font-extrabold uppercase tracking-[0.05em]", severityStyles[latestAlertWithBrief.severity])}>
-              {latestAlertWithBrief.severity}
-            </span>
-          </div>
-          <p className="mb-4 mt-2 whitespace-pre-line text-[15px] leading-relaxed">{latestAlertWithBrief.ai_brief}</p>
-          {latestAlertWithBrief.suggested_action && (
-            <div className="border-t-2 border-divider pt-3.5">
-              <div className="kicker">Recommended action</div>
-              <div className="my-1.5 text-[19px] font-extrabold leading-tight">{latestAlertWithBrief.suggested_action}</div>
+            <div className="h-[230px] w-full border border-divider bg-surface">
+              {scoreHistoryData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart
+                    data={scoreHistoryData}
+                    margin={{ top: 16, right: 16, bottom: 8, left: -16 }}
+                    onMouseMove={(state) => {
+                      if (typeof state.activeTooltipIndex === "number") setHoveredIdx(state.activeTooltipIndex)
+                    }}
+                    onMouseLeave={() => setHoveredIdx(null)}
+                  >
+                    <XAxis dataKey="date" tickFormatter={formatDate} tick={{ fontSize: 11, fill: "#7d7979" }} axisLine={false} tickLine={false} />
+                    <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: "#7d7979" }} axisLine={false} tickLine={false} />
+                    <Tooltip
+                      contentStyle={{ border: "1px solid rgba(32,30,29,0.4)", borderRadius: 0, background: "#f3f2f2", fontSize: 12 }}
+                      labelFormatter={(label) => (typeof label === "string" ? formatDate(label) : String(label ?? ""))}
+                      formatter={(v) => [v, "Risk"]}
+                    />
+                    <ReferenceLine y={RISK_ALERT_THRESHOLD} stroke={HEX.accent} strokeDasharray="7 6" />
+                    <Line type="monotone" dataKey="score" stroke={HEX[tier]} strokeWidth={2.4} dot={false} activeDot={{ r: 4 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <p className="flex h-full items-center justify-center text-[13px] text-neutral-700">
+                  No score history yet — run /score/recompute for this account.
+                </p>
+              )}
             </div>
+
+            {activePoint && (
+              <div className="mt-3 flex flex-wrap items-center gap-x-8 gap-y-3 border border-divider bg-surface px-5 py-3.5">
+                <div className="flex-none">
+                  <div className="kicker">{formatDate(activePoint.computed_at)}</div>
+                  <div className={cn("text-[22px] font-extrabold leading-none tabular-nums", RISK_STYLES[activeTier].text)}>
+                    {activePoint.composite_score.toFixed(0)}
+                  </div>
+                </div>
+                <div className="h-8 w-px flex-none bg-divider" aria-hidden="true" />
+                {activeSnapshot ? (
+                  <div className="flex flex-1 flex-wrap gap-x-6 gap-y-2">
+                    {TRACKED_SIGNALS.map((signal) => (
+                      <div key={signal} className="flex-none">
+                        <div className="text-[10px] uppercase tracking-[0.08em] text-neutral-600">{formatSignalName(signal)}</div>
+                        <div className="text-[14px] font-extrabold tabular-nums">
+                          {formatSignalValue(signal, activeSnapshot[signal] as number)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[12.5px] text-neutral-700">No signal detail recorded for this period.</p>
+                )}
+              </div>
+            )}
+          </section>
+
+          <section className="px-10 pb-3 pt-6">
+            <h2 className="text-[17px]">Signal trends</h2>
+            <p className="mt-1 text-[12.5px] text-neutral-700">
+              Raw signal values over each scored period. Good/Watch/Risk is colour-coded against this account's own history, not a fixed
+              threshold — the same "compare to its own baseline" rule the risk score itself uses.
+            </p>
+          </section>
+          <section className="grid gap-4 px-10 pb-8 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
+            {TRACKED_SIGNALS.map((signal) => (
+              <SignalSparkline key={signal} signal={signal} history={account.signal_history} />
+            ))}
+          </section>
+
+          {latestAlertWithBrief && (
+            <section className="rule bg-surface px-10 pb-7 pt-6">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="text-[10.5px] font-extrabold uppercase tracking-[0.1em] text-accent-700">AI brief</div>
+                <span className={cn("px-2 py-[3px] text-[10.5px] font-extrabold uppercase tracking-[0.05em]", severityStyles[latestAlertWithBrief.severity])}>
+                  {latestAlertWithBrief.severity}
+                </span>
+              </div>
+
+              {latestAlertWithBrief.signals_fired.length > 0 && (
+                <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                  <span className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-neutral-600">Signals detected</span>
+                  {latestAlertWithBrief.signals_fired.map((signal) => (
+                    <span key={signal} className="border border-divider bg-ground px-2 py-[3px] text-[10.5px] font-extrabold uppercase tracking-[0.05em] text-neutral-800">
+                      {formatSignalName(signal)}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              <p className="mb-4 mt-3 whitespace-pre-line text-[15px] leading-relaxed">{latestAlertWithBrief.ai_brief}</p>
+
+              {latestAlertWithBrief.suggested_action && (
+                <div className="bg-neutral-700 px-4 py-2.5">
+                  <div className="text-[10.5px] font-extrabold uppercase tracking-[0.06em] text-neutral-300">Recommended action</div>
+                  <div className="mt-1 text-[17px] font-extrabold leading-tight text-ground">{latestAlertWithBrief.suggested_action}</div>
+                </div>
+              )}
+
+              <div className="mt-4 border-t border-divider pt-2.5 text-[11px] text-neutral-600">
+                Written from the signals above. The score itself is deterministic — the model never sets it.
+              </div>
+            </section>
           )}
-          <div className="mt-4 border-t border-divider pt-2.5 text-[11px] text-neutral-600">
-            Written from the signals above. The score itself is deterministic — the model never sets it.
-          </div>
+        </>
+      ) : (
+        <section className="rule px-10 py-10">
+          <EmptyState
+            title={
+              coverage.daysRemaining <= 21 ? "Analysis will be available soon." : "This client needs more data before analysis is available."
+            }
+            body={`ClientPulse requires at least ${MIN_DATA_COVERAGE_DAYS} days of activity to identify meaningful trends and calculate a reliable risk score.`}
+            extra={
+              <div className="mt-4 text-[12.5px] font-semibold text-neutral-600">
+                {coverage.days} of {MIN_DATA_COVERAGE_DAYS} days collected
+                {coverage.daysRemaining > 0 && ` · ${coverage.daysRemaining} day${coverage.daysRemaining === 1 ? "" : "s"} to go`}
+              </div>
+            }
+          />
         </section>
       )}
 
