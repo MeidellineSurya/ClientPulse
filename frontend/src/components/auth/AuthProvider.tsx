@@ -12,38 +12,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!supabase) {
+      setAccessTokenProvider(null)
       setLoading(false)
       return
     }
 
     let active = true
+    const applySession = (nextSession: Session | null) => {
+      if (!active) return
+      setAccessTokenProvider(async () => nextSession?.access_token ?? null)
+      setSession(nextSession)
+      setLoading(false)
+    }
     void (async () => {
       try {
         const { data } = await supabase.auth.getSession()
-        if (active) setSession(data.session)
+        applySession(data.session)
       } catch {
-        if (active) setSession(null)
-      } finally {
-        if (active) setLoading(false)
+        applySession(null)
       }
     })()
     const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      if (active) {
-        setSession(nextSession)
-        setLoading(false)
-      }
+      applySession(nextSession)
     })
 
     return () => {
       active = false
+      setAccessTokenProvider(null)
       data.subscription.unsubscribe()
     }
   }, [])
-
-  useEffect(() => {
-    setAccessTokenProvider(async () => session?.access_token ?? null)
-    return () => setAccessTokenProvider(null)
-  }, [session])
 
   async function signIn(email: string, password: string) {
     if (!supabase) {
