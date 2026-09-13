@@ -55,6 +55,15 @@ class GmailCalendarIngestResult(BaseModel):
     meetings_cancelled: int
 
 
+class GoogleIntegrationStatus(BaseModel):
+    # Response for GET /ingest/gmail-calendar/status: whether this agency's
+    # Google OAuth credentials are configured and actually usable, without
+    # pulling any real Gmail/Calendar data. One connection powers both
+    # Gmail and Calendar ingestion, so the frontend shows one status for both.
+    connected: bool
+    detail: str | None = None
+
+
 class AccountScoreResult(BaseModel):
     # Response for POST /score/recompute/{account_id}, and one entry per
     # account in POST /score/recompute's batch response.

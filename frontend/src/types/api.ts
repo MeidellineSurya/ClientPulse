@@ -46,6 +46,40 @@ export interface Alert {
   status: "open" | "acknowledged" | "resolved"
 }
 
+export interface GoogleIntegrationStatus {
+  connected: boolean
+  detail: string | null
+}
+
+export interface GmailCalendarIngestResult {
+  account_id: string
+  period_start: string
+  period_end: string
+  avg_response_time_hours: number
+  meetings_scheduled: number
+  meetings_cancelled: number
+}
+
+export interface InvoiceRowError {
+  row_number: number
+  error: string
+}
+
+export interface UnmatchedInvoiceRow {
+  row_number: number
+  account_email: string
+  reason: string
+}
+
+export interface CsvIngestResult {
+  rows_received: number
+  rows_parsed: number
+  rows_failed: number
+  errors: InvoiceRowError[]
+  snapshots_updated: number
+  unmatched: UnmatchedInvoiceRow[]
+}
+
 export interface AccountDetail {
   id: string
   name: string
