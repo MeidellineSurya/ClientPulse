@@ -1,11 +1,12 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Link } from "react-router-dom"
 
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { EmptyState } from "@/components/ui/EmptyState"
+import { Loading } from "@/components/ui/Loading"
+import { Segmented } from "@/components/ui/Segmented"
 import { api, ApiError } from "@/lib/api"
 import { formatDate, formatSignalName, severityStyles } from "@/lib/format"
+import { cn } from "@/lib/utils"
 import type { Alert } from "@/types/api"
 
 const STATUS_FLOW: Record<Alert["status"], Alert["status"]> = {
@@ -20,10 +21,14 @@ const STATUS_LABEL: Record<Alert["status"], string> = {
   resolved: "Resolved",
 }
 
+const FILTERS = ["All", "Open", "Acknowledged", "Resolved"] as const
+type Filter = (typeof FILTERS)[number]
+
 export function Alerts() {
   const [alerts, setAlerts] = useState<Alert[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [updatingId, setUpdatingId] = useState<string | null>(null)
+  const [filter, setFilter] = useState<Filter>("All")
 
   useEffect(() => {
     api
@@ -46,61 +51,78 @@ export function Alerts() {
     }
   }
 
+  const shown = useMemo(() => {
+    if (!alerts) return []
+    if (filter === "All") return alerts
+    return alerts.filter((a) => STATUS_LABEL[a.status] === filter)
+  }, [alerts, filter])
+
+  const openCount = alerts?.filter((a) => a.status === "open").length ?? 0
+
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Alerts</h1>
-        <p className="text-sm text-muted-foreground">Every flagged account, newest first.</p>
+    <div>
+      <header className="rule px-10 pb-6 pt-8">
+        <h1 className="max-w-[20ch] text-[34px] tracking-[-0.03em]">Catch problems while there's still time.</h1>
+        <p className="mt-2 max-w-[66ch] text-[13.5px] text-neutral-700">
+          An alert fires only when composite risk crosses the threshold <em>and</em> the trend has worsened for three
+          periods running — so this queue stays short enough to work through each morning.
+        </p>
+      </header>
+
+      {error && <div className="border-b border-divider bg-risk-tint px-10 py-3 text-[13px] text-risk-ink">{error}</div>}
+
+      <div className="flex flex-wrap items-center gap-3 border-b border-divider px-10 py-3.5">
+        <Segmented name="alert-filter" options={FILTERS} value={filter} onChange={setFilter} />
+        <div className="ml-auto text-[12.5px] text-neutral-700">
+          {shown.length} alerts · {openCount} open
+        </div>
       </div>
 
-      {error && (
-        <div className="rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          {error}
-        </div>
-      )}
-
-      <div className="flex flex-col gap-3">
-        {alerts?.map((alert) => (
-          <Card key={alert.id}>
-            <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+      <div className="flex flex-col gap-4 px-10 pb-12 pt-5">
+        {!alerts && <Loading rows={4} />}
+        {alerts && shown.length === 0 && <EmptyState title="Queue clear" body="Nothing in this filter needs your attention right now." />}
+        {shown.map((alert) => (
+          <article key={alert.id} className="border border-divider">
+            <div className="flex flex-wrap items-start gap-4 border-b border-divider px-5 py-4">
               <div>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Link to={`/accounts/${alert.account_id}`} className="hover:underline">
+                <div className="flex items-center gap-2.5">
+                  <Link to={`/accounts/${alert.account_id}`} className="text-[18px] font-extrabold tracking-[-0.02em] hover:text-accent-700">
                     {alert.account_name ?? alert.account_id}
                   </Link>
-                  <Badge variant="secondary" className={severityStyles[alert.severity]}>
+                  <span className={cn("px-2 py-[3px] text-[10.5px] font-extrabold uppercase tracking-[0.05em]", severityStyles[alert.severity])}>
                     {alert.severity}
-                  </Badge>
-                  <Badge variant="outline">{STATUS_LABEL[alert.status]}</Badge>
-                </CardTitle>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Triggered {formatDate(alert.triggered_at)} · {alert.signals_fired.map(formatSignalName).join(", ")}
-                </p>
+                  </span>
+                  <span className="border border-divider px-2 py-[3px] text-[10.5px] font-extrabold uppercase tracking-[0.05em] text-neutral-700">
+                    {STATUS_LABEL[alert.status]}
+                  </span>
+                </div>
+                <div className="mt-0.5 text-[12px] text-neutral-700">
+                  Triggered {formatDate(alert.triggered_at)} · {alert.signals_fired.map(formatSignalName).join(", ") || "no signals recorded"}
+                </div>
               </div>
               {alert.status !== "resolved" && (
-                <Button
-                  size="sm"
-                  variant="outline"
+                <button
+                  className="btn btn-secondary ml-auto"
                   disabled={updatingId === alert.id}
                   onClick={() => advanceStatus(alert)}
                 >
                   Mark {STATUS_LABEL[STATUS_FLOW[alert.status]]}
-                </Button>
+                </button>
               )}
-            </CardHeader>
+            </div>
             {alert.ai_brief && (
-              <CardContent className="text-sm">
+              <div className="px-5 py-4 text-[14px] leading-relaxed">
                 <p className="whitespace-pre-line">{alert.ai_brief}</p>
                 {alert.suggested_action && (
-                  <p className="mt-1 font-medium">Suggested action: {alert.suggested_action}</p>
+                  <div className="mt-3 border-l-[3px] border-ink pl-3.5">
+                    <div className="kicker">Recommended</div>
+                    <div className="text-[15px] font-extrabold leading-snug">{alert.suggested_action}</div>
+                  </div>
                 )}
-              </CardContent>
+              </div>
             )}
-          </Card>
+          </article>
         ))}
-        {alerts !== null && alerts.length === 0 && (
-          <p className="py-8 text-center text-muted-foreground">No alerts — everything's healthy.</p>
-        )}
       </div>
     </div>
   )
