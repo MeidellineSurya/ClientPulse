@@ -330,13 +330,55 @@ stripping the original request path before it reached the app.
   vars, a fresh `vercel deploy --prod` was needed before `/accounts` could
   reach Supabase.
 
-**To redeploy after a code change:**
-- **Frontend (Render):** confirmed auto-deploy on push to `main`
-  (`autoDeploy: yes`, `autoDeployTrigger: commit` — verified in the API
-  response when the service was created). Merging to `main` is enough.
-- **Backend (Vercel):** deployed via CLI (`vercel deploy --prod` from
-  `backend/`), and `vercel project inspect` doesn't show a confirmed Git
-  integration — **don't assume pushing to `main` redeploys it** until
-  someone verifies that in the Vercel dashboard (Project → Settings → Git)
-  or just connects it there directly. Until then, redeploy manually after
-  backend changes: `cd backend && vercel deploy --prod --yes`.
+**Current redeploy behavior (verified 2026-09-13):**
+- **Backend (Vercel):** Git integration is now confirmed. Merging auth commit
+  `b242f0c` to `main` produced successful Preview and Production deployments.
+  The canonical backend then returned `200` for `/health` and `401` for
+  unauthenticated `/accounts` and `/alerts`, proving the protected build is live.
+- **Frontend (Render):** do **not** rely on the earlier auto-deploy claim. After
+  `b242f0c` reached `main`, a ten-minute production poll never observed the new
+  auth bundle; Render continued serving the older build. GitHub's public
+  Deployments view showed Vercel deployments only. Trigger and inspect the
+  Render deployment from the account/workspace that owns
+  `clientpulse-frontend`.
+
+## 12. Authentication deployment handoff
+
+**Completed:**
+- Bearer authentication and server-resolved agency isolation are merged to
+  `main` at `b242f0c`.
+- The alert-persistence and auth/RLS migrations are applied to live Supabase.
+- `public.agency_member` contains the production StudioCo admin binding.
+- Live PostgREST verification exercised alert revisions `0 → 1 → 2`, rejected a
+  stale compare-and-swap update, rejected a duplicate active alert, and cleaned
+  up all temporary verification rows.
+- The backend production deployment is live and denies unauthenticated protected
+  routes.
+- The frontend includes restored-session token ordering and invite/recovery
+  password setup; the final local gates were 182 backend tests, 8 frontend tests,
+  frontend production build, and frontend lint.
+
+**Remaining, in order:**
+1. In the Render account/workspace that owns `clientpulse-frontend`, set
+   `VITE_API_BASE_URL`, `VITE_SUPABASE_URL`, and `VITE_SUPABASE_ANON_KEY`. Never
+   expose `SUPABASE_SERVICE_ROLE_KEY` to Vite/browser configuration.
+2. Trigger a Render deployment of `b242f0c` and prove the live JavaScript bundle
+   contains the auth/password-setup flow. The temporary Render API key tested
+   during handoff authenticated successfully but saw zero services, so it belongs
+   to the wrong account/workspace.
+3. In Supabase Auth URL Configuration, set the Site URL to the canonical Render
+   frontend and add that origin's callback wildcard to the redirect allowlist.
+   A generated recovery-link probe currently falls back to localhost, which
+   reproduces the user's “can't connect to server” symptom.
+4. Use a Supabase token with **Auth Config: Read-write** and **Project Settings:
+   Read-write**, or make step 3 in the dashboard. The scoped token tested during
+   handoff could read Auth config but received `403` on update.
+5. Send a fresh password-recovery email only after steps 1–4, then verify:
+   callback → session → set password → authenticated `/accounts` request →
+   StudioCo-scoped data.
+6. Configure `GOOGLE_AGENCY_ID` in the backend deployment before live Google
+   ingestion acceptance. The application deliberately returns `503` when it is
+   absent and `404` when the authenticated agency does not match.
+
+No customer UUIDs, email addresses, tokens, passwords, project references, API
+keys, or OAuth credentials belong in this document or the repository.
