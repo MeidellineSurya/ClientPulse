@@ -58,13 +58,23 @@ doc.
       with optimistic concurrency control (no reopening resolved alerts, no moving
       backwards). 146/146 tests passing. **Run for real against the live Supabase
       project** — verified end-to-end in an actual browser session.
-- [x] Gmail/Calendar OAuth ingestion — `/ingest/gmail-calendar/{account_id}` now
-      uses the production metadata-only Gmail and read-only Calendar APIs, eagerly
-      refreshes and scope-checks OAuth credentials, filters Gmail headers locally
-      because `gmail.metadata` forbids server-side `q`, maps Google failures cleanly,
-      validates periods/UUIDs, and tests the complete fetch → compute → Supabase
-      snapshot-write path without reading message bodies. Live-account verification
-      still needs project-specific Google credentials (Supabase side is now live).
+- [x] Gmail/Calendar OAuth ingestion — **live-verified against a real Google
+      account** (2026-09-13). `/ingest/gmail-calendar/{account_id}` uses the
+      production metadata-only Gmail and read-only Calendar APIs, eagerly
+      refreshes and scope-checks OAuth credentials (confirmed granting exactly
+      `gmail.metadata` + `calendar.readonly`, nothing extra), maps Google
+      failures cleanly, validates periods/UUIDs. A real end-to-end call against
+      a live-connected mailbox completed in ~8.6s and wrote a real
+      `signal_snapshot` row. **Found and fixed a real bug during that live
+      test:** `gmail_signals.fetch_message_metadata` had no date bound at all
+      (Gmail blocks the `q` search param under `gmail.metadata` scope) — it
+      was paging through and fetching metadata for a connected mailbox's
+      *entire* history on every call, regardless of the requested period. Now
+      relies on Gmail's newest-first list ordering to stop as soon as it walks
+      past the period, plus a hard 500-message cap as a backstop either way —
+      see `gmail_signals.py` and its tests. **Real credentials are configured
+      in both `backend/.env` and the Vercel backend's production env**, bound
+      to a specific `GOOGLE_AGENCY_ID` (StudioCo).
 - [x] Groq brief provider implemented (`openai/gpt-oss-120b`, validated JSON +
       deterministic fallback) — **now wired into `POST /score/recompute`**
       (`app/groq_client.py` + `app/services/brief_generation.py`). Fixed 3 real
@@ -76,7 +86,12 @@ doc.
       `tests/conftest.py` fixture). Verified against the live Supabase project
       with a real `GROQ_API_KEY` — alerts now carry genuine LLM-generated
       briefs, confirmed causal-claim-free and auto-contact-free by inspecting
-      the actual text.
+      the actual text. **A 4th real bug, found later (2026-09-13):** the key
+      briefly went stale in production after a rotation — turned out to be a
+      single leading space in `backend/.env` (`GROQ_API_KEY= gsk_...` instead
+      of `GROQ_API_KEY=gsk_...`), which produces a 401 with no other symptom.
+      Worth checking first if a Groq call ever silently falls back after a
+      key rotation.
 - [x] Deterministic alert trigger implemented — `scoring_engine.py` confirmed as
       the sole decision engine, see ✅ below.
 - [x] Frontend (Vite + React) skeleton running — on `feat/frontend-app`, merged with
@@ -116,8 +131,11 @@ doc.
       `Z_CAP=3.0` are placeholders empirically tuned against seed data, not values
       specified in this doc.
       Also included: **`revenue_at_risk`** per account (feeds the Portfolio page's
-      summary bar with a real number — $418,369.20 across the 3 live-flagged
-      accounts) and **`total_revenue_at_risk`** on the batch endpoint;
+      summary bar with a real number — $349,492.80 across the 3 live-flagged
+      accounts as of 2026-09-13, after the contact-turnover reweight and the
+      Anchor & Ives contact-history backfill; this number moves whenever the
+      signals/weights change, don't treat it as fixed) and
+      **`total_revenue_at_risk`** on the batch endpoint;
       **`signal_contributions`** — a %-breakdown of which signals drove each score;
       alert de-duplication so repeated recompute calls escalate/refresh an existing
       open alert instead of spamming duplicates.
@@ -125,8 +143,16 @@ doc.
       and **now fully wired end-to-end** — see the Groq brief provider item above
 - [x] Frontend connected to backend — real fetches throughout, no hardcoded arrays,
       verified in an actual headless-browser session against the live project
-- [ ] Live Gmail/Calendar pull (stretch goal, cut first if behind — no Google
-      credentials available yet, Supabase side is otherwise ready)
+- [x] CSV invoice import — **live-verified** (2026-09-13): a real CSV POSTed to
+      the production backend correctly matched an account by email, computed
+      `invoice_days_late`, and updated the right `signal_snapshot` period
+      (confirmed by re-reading the row afterward).
+- [x] Contact-turnover signal (`contact_changed`) — a new point of contact on
+      an account, live in the composite score since PR #14, with a visible
+      "New point of contact" callout on Account Detail since PR #18 (was §13,
+      now resolved — see the note at the end of this doc).
+- [x] Live Gmail/Calendar pull — see the checklist item above; no longer a
+      stretch goal, done and verified against a real connected account.
 - [ ] Demo run-through rehearsed end to end
 
 > ✅ **Resolved: the two unreconciled alert-decision implementations.**
@@ -271,8 +297,9 @@ on it, not by checking git log.
 ## 9. Demo script (rehearse this, don't wing it)
 
 1. Portfolio view → 15 real accounts (live Supabase, not a mock), sorted by
-   risk, at-risk revenue total shown at top — $418,369.20 across the 3
-   flagged accounts, a real computed number
+   risk, at-risk revenue total shown at top — $349,492.80 across the 3
+   flagged accounts as of 2026-09-13, a real computed number (re-verify
+   this figure before a live demo — it moves whenever scores are recomputed)
 2. Click into a flagged account → real Recharts trend charts per signal +
    composite-score-over-time chart, plus a real Groq-generated AI brief card
    citing the actual `signal_contributions` — "here's exactly why this
@@ -330,17 +357,21 @@ stripping the original request path before it reached the app.
   vars, a fresh `vercel deploy --prod` was needed before `/accounts` could
   reach Supabase.
 
-**Current redeploy behavior (verified 2026-09-13):**
-- **Backend (Vercel):** Git integration is now confirmed. Merging auth commit
-  `b242f0c` to `main` produced successful Preview and Production deployments.
-  The canonical backend then returned `200` for `/health` and `401` for
-  unauthenticated `/accounts` and `/alerts`, proving the protected build is live.
-- **Frontend (Render):** do **not** rely on the earlier auto-deploy claim. After
-  `b242f0c` reached `main`, a ten-minute production poll never observed the new
-  auth bundle; Render continued serving the older build. GitHub's public
-  Deployments view showed Vercel deployments only. Trigger and inspect the
-  Render deployment from the account/workspace that owns
-  `clientpulse-frontend`.
+**Current redeploy behavior (last confirmed 2026-09-13, after several more
+merges to `main`):**
+- **Backend (Vercel):** Git integration is confirmed reliable — every merge to
+  `main` since (`b242f0c`, PR #18, PR #19) triggered an automatic Production
+  deployment within seconds, no manual step needed. `/health` returns `200`,
+  unauthenticated `/accounts`/`/alerts` return `401`.
+- **Frontend (Render):** auto-deploy (`autoDeploy: yes`, `autoDeployTrigger:
+  commit`) is configured correctly but **still does not reliably fire** — this
+  was re-confirmed twice more (PR #17 and PR #18 both required a manual
+  `render deploys create` before the live bundle actually updated; deploy
+  history showed no new deploy had been triggered by either merge on its own).
+  **Don't assume a merge to `main` updated the live frontend** — always verify
+  by checking the deployed bundle for expected new-code markers (or just
+  trigger a manual deploy after every merge that touches `frontend/`) until
+  someone actually debugs the GitHub webhook on Render's side.
 
 ## 12. Authentication deployment handoff
 
@@ -358,38 +389,52 @@ stripping the original request path before it reached the app.
   password setup; the final local gates were 182 backend tests, 8 frontend tests,
   frontend production build, and frontend lint.
 
-**Remaining, in order:**
-1. In the Render account/workspace that owns `clientpulse-frontend`, set
-   `VITE_API_BASE_URL`, `VITE_SUPABASE_URL`, and `VITE_SUPABASE_ANON_KEY`. Never
-   expose `SUPABASE_SERVICE_ROLE_KEY` to Vite/browser configuration.
-2. Trigger a Render deployment of `b242f0c` and prove the live JavaScript bundle
-   contains the auth/password-setup flow. The temporary Render API key tested
-   during handoff authenticated successfully but saw zero services, so it belongs
-   to the wrong account/workspace.
-3. In Supabase Auth URL Configuration, set the Site URL to the canonical Render
-   frontend and add that origin's callback wildcard to the redirect allowlist.
-   A generated recovery-link probe currently falls back to localhost, which
-   reproduces the user's “can't connect to server” symptom.
-4. Use a Supabase token with **Auth Config: Read-write** and **Project Settings:
-   Read-write**, or make step 3 in the dashboard. The scoped token tested during
-   handoff could read Auth config but received `403` on update.
-5. Send a fresh password-recovery email only after steps 1–4, then verify:
-   callback → session → set password → authenticated `/accounts` request →
-   StudioCo-scoped data.
-6. Configure `GOOGLE_AGENCY_ID` in the backend deployment before live Google
-   ingestion acceptance. The application deliberately returns `503` when it is
-   absent and `404` when the authenticated agency does not match.
+**All 6 steps below are done and verified (2026-09-13) — kept for the record,
+not because anything is still outstanding:**
+1. ~~Set `VITE_API_BASE_URL`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` on
+   the Render frontend.~~ Done.
+2. ~~Trigger a Render deployment and prove the live bundle contains the
+   auth/password-setup flow.~~ Done — confirmed via a real headless-browser
+   load showing the actual "Welcome back / Sign in" gate.
+3. ~~Set Supabase Auth's Site URL to the real Render frontend and add its
+   redirect wildcard to the allowlist.~~ Done.
+4. ~~Get a properly-scoped Supabase token, or do step 3 by hand.~~ Done by
+   hand in the dashboard.
+5. ~~Send a fresh password-recovery email and verify the full loop.~~ Done —
+   real recovery email → real click-through → set password → authenticated
+   `/accounts` request returned real StudioCo-scoped data (confirmed via
+   DevTools Network tab, 200 with real account names, not empty/401).
+6. ~~Configure `GOOGLE_AGENCY_ID` in the backend deployment.~~ Done — set on
+   Vercel production, redeployed, verified.
+
+One real gotcha hit along the way, worth keeping: the first recovery email
+click failed with `otp_expired` even though it was clicked almost
+immediately — the likely cause is an email client/security scanner
+auto-visiting the link before the human did, consuming the one-time token.
+Resending and clicking immediately worked. If this happens again, check
+Supabase Auth Logs for two verify attempts close together.
 
 No customer UUIDs, email addresses, tokens, passwords, project references, API
 keys, or OAuth credentials belong in this document or the repository.
 
-## 13. Open requirement: surface contact turnover on Account Detail
+## 13. Contact turnover on Account Detail — resolved
 
-**Status: not yet implemented — this is a spec, for whoever picks up
-frontend work next.** Backend/scoring side (§5.1) is done, merged, and
-verified against the live project; nothing here blocks that. Still
-outstanding even after the frontend restyle/auth work (§12) — that pass
-didn't touch this.
+> ✅ **Resolved (PR #18, 2026-09-13).** Implemented exactly as specified
+> below: `GET /accounts/{id}` now returns `contact_changed_at` /
+> `previous_contact_email` (derived server-side via the same
+> `baseline_engine.derive_contact_changed` the scoring engine uses, so it
+> can never disagree with what actually drove the score), and
+> `AccountDetail.tsx` shows the callout under the header, independent of
+> whether an alert fired. Verified in a real browser against live,
+> backfilled data for Anchor & Ives — see git history for the screenshot
+> discussion. The original spec is kept below for context, not because
+> anything here is still open.
+
+**Status (historical — see resolution above): not yet implemented — this is
+a spec, for whoever picks up frontend work next.** Backend/scoring side
+(§5.1) is done, merged, and verified against the live project; nothing here
+blocks that. Still outstanding even after the frontend restyle/auth work
+(§12) — that pass didn't touch this.
 
 **Why this matters:** `contact_changed` already flows through automatically
 wherever an alert is shown today — `alert.signals_fired` renders it as
