@@ -64,17 +64,15 @@ Example after configuring Google and Supabase credentials:
 
 ```bash
 curl -X POST \
+  -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
   "http://localhost:8000/ingest/gmail-calendar/ACCOUNT_UUID?period_start=2026-09-01&period_end=2026-09-07"
 ```
 
 Both period bounds must be supplied together and `period_end` cannot precede
 `period_start`. Omitting both defaults to the current Monday–Sunday week. OAuth
 failures return `503`; Gmail/Calendar API failures return `502`; no snapshot is written
-unless both Google reads succeed.
-
-The hackathon API does not yet provide application-level authentication. Keep this
-route on a private network or behind an authenticated gateway; do not expose a
-mailbox-scanning, service-role-backed ingestion endpoint directly to the public internet.
+unless both Google reads succeed. The bearer token must identify a user assigned to
+the account's agency; cross-agency account IDs return `404` before Google is contacted.
 
 Calendar cancellation counts are observational: attendee-less cancelled items returned by
 the exact contact query are attributed to that contact, but this polling route is not a
