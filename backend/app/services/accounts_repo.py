@@ -4,9 +4,8 @@ this workstream doesn't couple to scoring's internals — it only needs the
 full row shape for display, not the subset scoring computes drift from.
 """
 
-from supabase import Client
-
 from app.db import with_retry
+from supabase import Client
 
 SIGNAL_SNAPSHOT_COLUMNS = (
     "period_start, period_end, avg_response_time_hours, meetings_scheduled, "
@@ -99,8 +98,8 @@ def fetch_signal_histories(
     columns = f"account_id, {SIGNAL_SNAPSHOT_COLUMNS}"
     for offset in range(0, len(account_ids), chunk_size):
         chunk = account_ids[offset : offset + chunk_size]
-        resp = (
-            client.table("signal_snapshot")
+        resp = with_retry(
+            lambda chunk=chunk: client.table("signal_snapshot")
             .select(columns)
             .in_("account_id", chunk)
             .execute()
@@ -119,8 +118,8 @@ def fetch_health_score_histories(
     histories: dict[str, list[dict]] = {account_id: [] for account_id in account_ids}
     for offset in range(0, len(account_ids), chunk_size):
         chunk = account_ids[offset : offset + chunk_size]
-        resp = (
-            client.table("health_score")
+        resp = with_retry(
+            lambda chunk=chunk: client.table("health_score")
             .select("account_id, composite_score, trend_slope, computed_at")
             .in_("account_id", chunk)
             .execute()
