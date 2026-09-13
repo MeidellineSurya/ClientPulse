@@ -145,6 +145,10 @@ class SignalSnapshotOut(BaseModel):
     meetings_cancelled: int
     invoice_days_late: int
     email_thread_count: int
+    # Raw per-period contact email — not shown directly, but AccountDetail's
+    # contact_changed_at/previous_contact_email (below) are derived from this
+    # across the list. See baseline_engine.derive_contact_changed.
+    primary_contact_email: str | None = None
 
 
 class AccountDetail(BaseModel):
@@ -160,3 +164,8 @@ class AccountDetail(BaseModel):
     health_computed_at: datetime | None
     signal_history: list[SignalSnapshotOut]
     alerts: list[AlertOut]
+    # Most recent point-of-contact change detected in signal_history, if
+    # any — see HANDOFF.md §13 and baseline_engine.derive_contact_changed.
+    # None whenever this account has never had a detected contact change.
+    contact_changed_at: date | None = None
+    previous_contact_email: str | None = None

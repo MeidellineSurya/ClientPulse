@@ -51,4 +51,6 @@ export interface AccountDetail {
   health_computed_at: string | null
   signal_history: SignalSnapshot[]
   alerts: Alert[]
+  contact_changed_at: string | null
+  previous_contact_email: string | null
 }

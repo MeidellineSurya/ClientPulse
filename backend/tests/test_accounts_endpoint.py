@@ -155,6 +155,72 @@ def test_get_account_detail_includes_signal_history_and_alerts():
     assert body["alerts"][0]["id"] == "alert-1"
 
 
+def test_get_account_detail_flags_a_contact_change_in_the_history():
+    account_id = "11111111-1111-4111-8111-111111111111"
+    fake_client = FakeSupabaseClient(
+        {
+            "account": [
+                {
+                    "id": account_id,
+                    "name": "Acme",
+                    "contract_value_monthly": 10000,
+                    "contract_start_date": "2025-01-01",
+                    "primary_contact_email": "new@acme.com",
+                }
+            ],
+            "signal_snapshot": [
+                {**_snapshot(account_id, "2026-01-01"), "primary_contact_email": "old@acme.com"},
+                {
+                    **_snapshot(account_id, "2026-01-08", "2026-01-14"),
+                    "primary_contact_email": "new@acme.com",
+                },
+            ],
+        }
+    )
+    client = _override_client(fake_client)
+    try:
+        response = client.get(f"/accounts/{account_id}")
+    finally:
+        app.dependency_overrides.pop(require_supabase_client, None)
+
+    body = response.json()
+    assert body["contact_changed_at"] == "2026-01-14"
+    assert body["previous_contact_email"] == "old@acme.com"
+
+
+def test_get_account_detail_no_contact_changed_at_when_contact_is_stable():
+    account_id = "11111111-1111-4111-8111-111111111111"
+    fake_client = FakeSupabaseClient(
+        {
+            "account": [
+                {
+                    "id": account_id,
+                    "name": "Acme",
+                    "contract_value_monthly": 10000,
+                    "contract_start_date": "2025-01-01",
+                    "primary_contact_email": "same@acme.com",
+                }
+            ],
+            "signal_snapshot": [
+                {**_snapshot(account_id, "2026-01-01"), "primary_contact_email": "same@acme.com"},
+                {
+                    **_snapshot(account_id, "2026-01-08", "2026-01-14"),
+                    "primary_contact_email": "same@acme.com",
+                },
+            ],
+        }
+    )
+    client = _override_client(fake_client)
+    try:
+        response = client.get(f"/accounts/{account_id}")
+    finally:
+        app.dependency_overrides.pop(require_supabase_client, None)
+
+    body = response.json()
+    assert body["contact_changed_at"] is None
+    assert body["previous_contact_email"] is None
+
+
 def test_get_account_detail_404_when_account_missing():
     fake_client = FakeSupabaseClient({"account": []})
     client = _override_client(fake_client)
