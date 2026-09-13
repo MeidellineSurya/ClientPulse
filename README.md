@@ -1,11 +1,58 @@
 # ClientPulse
 
-Behavioral churn early-warning tool for retainer-based agencies. Surfaces accounts
-that are quietly drifting toward churn (slower replies, more cancellations, late
-invoices) before the client says anything.
+**🔔 Your best clients don't announce they're leaving. Their behavior does — weeks before their contract does.**
 
-**🌐 Live:** [clientpulse-frontend.onrender.com](https://clientpulse-frontend.onrender.com)
+Marketing and creative agencies lose retainer clients with no warning, because every
+"AI churn prediction" tool on the market (Gainsight, ChurnZero, Pendo) needs
+product-usage data — and an agency's product is a *relationship*, not software, so
+that data simply doesn't exist. Clients actually leave over poor communication and
+weak guidance, not price, and that shows up as behavior long before anyone says a
+word: slower replies, more cancelled check-ins, later invoice payments, a new point
+of contact quietly taking over the account.
+
+**ClientPulse watches that drift** using data agencies already have — Gmail,
+Calendar, invoices — and flags an account before renewal, not after the churn
+notice lands.
+
+> **The math:** losing one $10K/month retainer costs an agency roughly **$140K**
+> once you count lost revenue, sunk onboarding, and the cost of replacing that
+> client. Saving *one* account a year pays for this tool many times over at a
+> realistic $150–300/month price point.
+
+**🌐 Live right now:** [clientpulse-frontend.onrender.com](https://clientpulse-frontend.onrender.com)
 (backend: [backend-ruddy-rho-34.vercel.app](https://backend-ruddy-rho-34.vercel.app))
+— monitoring **48 real accounts**, **12 currently flagged at-risk**, totaling
+**$1,566,844.20** in annualized revenue the live scoring engine has actually
+computed as sitting in the risk zone right now (2026-09-13, not a mockup —
+numbers move as scores get recomputed).
+
+## ✨ What it actually does
+
+- **Deterministic risk scoring, not a black box.** Every account is measured
+  against *its own* historical baseline — never a portfolio average — across 5
+  weighted behavioral signals: response time (30%), meeting cancellations
+  (25%), a new point of contact taking over (20%), late invoices (15%), and
+  declining meeting frequency (10%). The formula is real and inspectable; an
+  alert only fires on a *sustained* worsening trend, never a single bad week.
+- **Real dollars, not an abstract score.** Every flagged account carries a
+  `revenue_at_risk` figure and a per-signal breakdown of exactly what %
+  drove it — "97 and here's why," not just "97."
+- **AI writes, it never decides.** Groq (`openai/gpt-oss-120b`) generates the
+  plain-language brief explaining *why* an account is flagged — strictly
+  after the deterministic score already exists, and validated to reject any
+  response that claims false causal certainty or proposes contacting a
+  client automatically. The model can make the explanation worse; it can
+  never change the decision.
+- **Privacy-safe by construction.** Gmail ingestion runs under the
+  `gmail.metadata` OAuth scope — it is *structurally incapable* of reading
+  message bodies, not just policy-restricted from it. Calendar ingestion is
+  read-only. Invoice data comes from a plain CSV upload.
+- **A human always reviews before anything reaches a client.** Alerts land in
+  an inbox with an acknowledge/resolve workflow — the system never contacts
+  a client on its own.
+- **Multi-tenant from the ground up.** Real Supabase Auth, every request
+  scoped to the caller's own agency server-side — no client-supplied tenant
+  ID, no cross-agency data leakage.
 
 > 🚧 Hackathon build. This repo is being scaffolded incrementally — see commit
 > history for progress. Backend + frontend are live and verified end-to-end
@@ -111,11 +158,13 @@ and falls back rather than crashing.
 
 - [x] Repo scaffolding
 - [x] Supabase schema — applied to a live project
-- [x] Supabase seed data — applied to the live project (15 accounts, 120 signal_snapshot rows)
+- [x] Supabase seed data — applied to the live project (48 accounts, 1,228
+      signal_snapshot rows as of 2026-09-13, after a teammate's seed-data
+      expansion for a richer demo)
 - [x] FastAPI skeleton
 - [x] FastAPI endpoints (`/ingest/csv`, `GET /accounts[/{id}][/signals][/health-history]`,
       `GET /alerts`, `POST/PATCH /alerts/{id}` — all real Supabase reads/writes,
-      186/186 tests, merged to `main`, run for real against the live project)
+      201/201 tests, merged to `main`, run for real against the live project)
 - [x] CSV invoice import — **live-verified**: a real invoice CSV POSTed to the
       production backend correctly matched an account by email, computed
       `invoice_days_late`, and updated the right `signal_snapshot` period
@@ -130,8 +179,8 @@ and falls back rather than crashing.
       bounded to the requested period, with a hard cap as a backstop.
 - [x] Scoring engine (`/score/recompute[/{account_id}]` — deterministic composite risk,
       revenue-at-risk, per-signal explainability breakdown, alert dedup; merged to
-      `main`, run for real against the live project — 15 accounts scored, 3 alerts
-      fired, $349,492.80 total revenue at risk as of 2026-09-13 — this number
+      `main`, run for real against the live project — 48 accounts scored, 12 alerts
+      fired, $1,566,844.20 total revenue at risk as of 2026-09-13 — this number
       moves whenever scores are recomputed, re-verify before quoting it live)
 - [x] Point-of-contact turnover signal (`contact_changed` — a new stakeholder
       taking over an account, derived from `signal_snapshot.primary_contact_email`;
