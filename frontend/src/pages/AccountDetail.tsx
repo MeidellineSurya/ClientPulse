@@ -20,7 +20,7 @@ import {
   TRACKED_SIGNALS,
 } from "@/lib/format"
 import { cn, HEX, nearestByDate, RISK_STYLES } from "@/lib/utils"
-import type { AccountDetail as AccountDetailType, HealthScorePoint, SignalSnapshot } from "@/types/api"
+import type { AccountDetail as AccountDetailType, ContactChangeEvent, HealthScorePoint, SignalSnapshot } from "@/types/api"
 
 const RISK_ALERT_THRESHOLD = 60 // mirrors backend/app/services/scoring_engine.py
 
@@ -69,10 +69,10 @@ function SignalSparkline({ signal, history }: { signal: keyof SignalSnapshot; hi
                 formatter={(value) => [formatSignalValue(signal, value as number), formatSignalName(signal)]}
               />
               <Line
-                type="monotone"
+                type="linear"
                 dataKey="value"
                 stroke={HEX.ink}
-                strokeWidth={1.7}
+                strokeWidth={2}
                 dot={(props) => {
                   const status = signalStatus(signal, props.value as number, allValues)
                   const fill = status === "bad" ? HEX.risk : status === "watch" ? HEX.watch : HEX.healthy
@@ -85,6 +85,81 @@ function SignalSparkline({ signal, history }: { signal: keyof SignalSnapshot; hi
           <p className="flex h-full items-center text-[12px] text-neutral-600">No signal history yet</p>
         )}
       </div>
+    </div>
+  )
+}
+
+function ContactChangeChart({
+  events,
+  history,
+}: {
+  events: ContactChangeEvent[]
+  history: SignalSnapshot[]
+}) {
+  const eventByDate = new Map(events.map((event) => [event.period_end, event]))
+  const denominator = Math.max(1, history.length - 1)
+  const points = history.map((row, index) => ({
+    x: 4 + (index / denominator) * 92,
+    y: eventByDate.has(row.period_end) ? 10 : 38,
+    event: eventByDate.get(row.period_end),
+  }))
+  const summary = events.length === 0
+    ? `No changes across ${history.length} reporting periods`
+    : `${events.length} ${events.length === 1 ? "change" : "changes"} across ${history.length} reporting periods`
+
+  return (
+    <div className="border border-divider bg-surface p-4 [grid-column:1/-1]">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="text-[15px] font-extrabold">Contact changes</h3>
+        <span className="text-[11px] tabular-nums text-neutral-600">{summary}</span>
+      </div>
+      <svg
+        aria-label="Contact change events over time"
+        className="mt-3 h-24 w-full overflow-visible"
+        role="img"
+        viewBox="0 0 100 48"
+        preserveAspectRatio="none"
+      >
+        <line x1="4" y1="38" x2="96" y2="38" stroke={HEX.ink} strokeOpacity="0.18" strokeWidth="0.8" />
+        {points.length > 1 && (
+          <polyline
+            points={points.map((point) => `${point.x},${point.y}`).join(" ")}
+            fill="none"
+            stroke={events.length > 0 ? HEX.accent : HEX.ink}
+            strokeWidth="1.4"
+            vectorEffect="non-scaling-stroke"
+          />
+        )}
+        {points.filter((point) => point.event).map((point) => (
+          <line
+            key={point.event!.period_end}
+            data-testid="contact-event-marker"
+            x1={point.x}
+            x2={point.x}
+            y1="6"
+            y2="14"
+            stroke={HEX.accent}
+            strokeWidth="3"
+            vectorEffect="non-scaling-stroke"
+          />
+        ))}
+      </svg>
+      {events.length > 0 ? (
+        <ol className="mt-2 grid gap-3 border-t border-divider pt-3 md:grid-cols-3">
+          {events.map((event) => (
+            <li key={event.period_end} className="min-w-0 text-[11.5px] leading-relaxed text-neutral-700">
+              <span className="block font-extrabold text-ink">{formatDate(event.period_end)}</span>
+              <span className="block break-words">
+                {event.previous_contact_email} → {event.current_contact_email}
+              </span>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className="mt-2 border-t border-divider pt-2 text-[11.5px] text-neutral-600">
+          The recorded contact identity stayed consistent throughout this history.
+        </p>
+      )}
     </div>
   )
 }
@@ -224,7 +299,14 @@ export function AccountDetail() {
                       formatter={(v) => [v, "Risk"]}
                     />
                     <ReferenceLine y={RISK_ALERT_THRESHOLD} stroke={HEX.accent} strokeDasharray="7 6" />
-                    <Line type="monotone" dataKey="score" stroke={HEX[tier]} strokeWidth={2.4} dot={false} activeDot={{ r: 4 }} />
+                    <Line
+                      type="linear"
+                      dataKey="score"
+                      stroke={HEX[tier]}
+                      strokeWidth={3}
+                      dot={{ r: 1.8, fill: HEX[tier], strokeWidth: 0 }}
+                      activeDot={{ r: 4.5, fill: HEX.accent, strokeWidth: 0 }}
+                    />
                   </LineChart>
                 </ResponsiveContainer>
               ) : (
@@ -268,7 +350,8 @@ export function AccountDetail() {
               threshold — the same "compare to its own baseline" rule the risk score itself uses.
             </p>
           </section>
-          <section className="grid gap-4 px-10 pb-8 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
+          <section className="grid gap-4 px-10 pb-8 [grid-template-columns:repeat(auto-fit,minmax(280px,1fr))]">
+            <ContactChangeChart events={account.contact_events ?? []} history={account.signal_history} />
             {TRACKED_SIGNALS.map((signal) => (
               <SignalSparkline key={signal} signal={signal} history={account.signal_history} />
             ))}

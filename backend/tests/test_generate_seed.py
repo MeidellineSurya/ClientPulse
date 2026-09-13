@@ -2,7 +2,10 @@
 
 import random
 from collections import Counter
+from itertools import pairwise
+from typing import cast
 
+from app.services.baseline_engine import derive_contact_changed
 from app.services.scoring_engine import score_account_history
 from scripts import generate_seed
 
@@ -87,14 +90,14 @@ def test_demo_alert_profiles_cover_varied_lifecycle_states_and_severities():
 
     profiles = generate_seed.build_demo_alert_profiles(dataset["accounts"])
 
-    assert len(profiles) == 19
+    assert len(profiles) == 20
     assert Counter(profile["status"] for profile in profiles.values()) == {
         "open": 6,
         "acknowledged": 6,
-        "resolved": 7,
+        "resolved": 8,
     }
     assert Counter(profile["severity"] for profile in profiles.values()) == {
-        "low": 4,
+        "low": 5,
         "medium": 7,
         "high": 5,
         "critical": 3,
@@ -129,3 +132,62 @@ def test_demo_alert_profiles_cover_varied_lifecycle_states_and_severities():
         recent_cancelled = sum(row["meetings_cancelled"] for row in history[-3:]) / 3
         assert recent_scheduled < early_scheduled
         assert recent_cancelled > early_cancelled
+
+
+def test_contact_alerts_have_multiple_real_history_events():
+    agency_id = generate_seed.stable_uuid("agency", "StudioCo")
+    dataset = generate_seed.build_seed_dataset(
+        random.Random(generate_seed.RNG_SEED),
+        agency_id,
+        anchor_end=generate_seed.date(2026, 9, 13),
+    )
+    profiles = generate_seed.build_demo_alert_profiles(dataset["accounts"])
+    contact_accounts = [
+        account
+        for account in dataset["accounts"]
+        if "contact_changed"
+        in cast(list[str], profiles.get(account["id"], {}).get("signals_fired", []))
+    ]
+
+    assert len(contact_accounts) == 4
+    assert Counter(profiles[account["id"]]["status"] for account in contact_accounts) == {
+        "open": 1,
+        "acknowledged": 1,
+        "resolved": 2,
+    }
+    for account in contact_accounts:
+        history = derive_contact_changed(
+            dataset["snapshots_by_account"][account["id"]]
+        )
+        assert sum(row["contact_changed"] for row in history) == 3
+
+
+def test_every_established_account_signal_history_has_visible_turning_points():
+    agency_id = generate_seed.stable_uuid("agency", "StudioCo")
+    dataset = generate_seed.build_seed_dataset(
+        random.Random(generate_seed.RNG_SEED),
+        agency_id,
+        anchor_end=generate_seed.date(2026, 9, 13),
+    )
+    displayed_signals = (
+        "avg_response_time_hours",
+        "email_thread_count",
+        "meetings_scheduled",
+        "meetings_cancelled",
+        "invoice_days_late",
+    )
+
+    for account in dataset["accounts"]:
+        if account["scenario"] == "new_account":
+            continue
+        history = dataset["snapshots_by_account"][account["id"]]
+        for signal in displayed_signals:
+            values = [row[signal] for row in history]
+            directions = [
+                1 if current > previous else -1
+                for previous, current in pairwise(values)
+                if current != previous
+            ]
+            turns = sum(previous != current for previous, current in pairwise(directions))
+            assert len(set(values)) >= 4, (account["name"], signal)
+            assert turns >= 4, (account["name"], signal)

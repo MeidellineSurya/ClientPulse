@@ -8,6 +8,7 @@ from app.auth import AuthContext, require_auth_context
 from app.schemas import (
     AccountDetail,
     AccountSummary,
+    ContactChangeEvent,
     HealthScorePoint,
     SignalSnapshotOut,
 )
@@ -72,11 +73,23 @@ def get_account_detail(
     # contributed to that period's score (see HANDOFF.md §13).
     contact_changed_at = None
     previous_contact_email = None
+    contact_events = []
     annotated_history = derive_contact_changed(signal_history)
     for previous_row, row in zip(signal_history, annotated_history[1:]):
         if row["contact_changed"]:
+            prior_email = previous_row.get("primary_contact_email")
+            current_email = row.get("primary_contact_email")
+            if not prior_email or not current_email:
+                continue
             contact_changed_at = row["period_end"]
-            previous_contact_email = previous_row.get("primary_contact_email")
+            previous_contact_email = prior_email
+            contact_events.append(
+                ContactChangeEvent(
+                    period_end=row["period_end"],
+                    previous_contact_email=prior_email,
+                    current_contact_email=current_email,
+                )
+            )
 
     return AccountDetail(
         id=account["id"],
@@ -88,6 +101,7 @@ def get_account_detail(
         trend_slope=latest_score.get("trend_slope"),
         health_computed_at=latest_score.get("computed_at"),
         signal_history=[SignalSnapshotOut(**row) for row in signal_history],
+        contact_events=contact_events,
         alerts=alerts,
         contact_changed_at=contact_changed_at,
         previous_contact_email=previous_contact_email,

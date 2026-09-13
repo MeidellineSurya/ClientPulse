@@ -59,7 +59,16 @@ assert len(ACCOUNT_NAMES) == len(SCENARIOS) == 48
 
 # Kept for compatibility with historical documentation and scenario tests.
 WORSENING_INDEXES = {index for index, scenario in enumerate(SCENARIOS) if scenario == "worsening"}
-CONTACT_TURNOVER_INDEXES = {47}
+# Four accounts carry real, staggered contact histories. Each tuple contains
+# the zero-based reporting periods where a known contact transitions to a new
+# known identity; only Orbit's final event is currently active.
+CONTACT_CHANGE_SCHEDULES = {
+    13: (5, 12, 19),
+    24: (6, 14, 22),
+    36: (4, 11, 18),
+    47: (6, 15, 25),
+}
+CONTACT_TURNOVER_INDEXES = set(CONTACT_CHANGE_SCHEDULES)
 CONTACT_FIRST_NAMES = ["Alex", "Jordan", "Sam", "Taylor", "Morgan", "Casey", "Riley", "Jamie"]
 CONTACT_LAST_NAMES = ["Reed", "Kim", "Patel", "Nguyen", "Ortiz", "Chen", "Brooks", "Diaz"]
 
@@ -133,13 +142,21 @@ def build_demo_alert_profiles(accounts: list[dict]) -> dict[str, dict[str, objec
         ordinal = seen[scenario]
         seen[scenario] += 1
         options = DEMO_ALERT_PROFILES_BY_SCENARIO.get(scenario, [])
+        has_contact_history = bool(account.get("_contact_change_indexes"))
         if ordinal >= len(options):
-            continue
-        status, severity = options[ordinal]
+            if not has_contact_history:
+                continue
+            status, severity = "resolved", "low"
+            signals = []
+        else:
+            status, severity = options[ordinal]
+            signals = list(DEMO_ALERT_SIGNALS_BY_SCENARIO[scenario])
+        if has_contact_history and "contact_changed" not in signals:
+            signals.append("contact_changed")
         profiles[account["id"]] = {
             "status": status,
             "severity": severity,
-            "signals_fired": list(DEMO_ALERT_SIGNALS_BY_SCENARIO[scenario]),
+            "signals_fired": signals,
         }
     return profiles
 
@@ -163,11 +180,15 @@ def build_accounts(rng: random.Random, agency_id: str) -> list[dict]:
         first, last = rng.choice(CONTACT_FIRST_NAMES), rng.choice(CONTACT_LAST_NAMES)
         slug = slugify(name)
         original_email = f"{first.lower()}.{last.lower()}@{slug}.com"
-        new_email = None
+        contact_emails = [original_email]
         if index in CONTACT_TURNOVER_INDEXES:
-            new_first = rng.choice([item for item in CONTACT_FIRST_NAMES if item != first])
-            new_last = rng.choice([item for item in CONTACT_LAST_NAMES if item != last])
-            new_email = f"{new_first.lower()}.{new_last.lower()}@{slug}.com"
+            for change_number in range(1, 4):
+                contact_first = CONTACT_FIRST_NAMES[(index + change_number * 2) % len(CONTACT_FIRST_NAMES)]
+                contact_last = CONTACT_LAST_NAMES[(index + change_number * 3) % len(CONTACT_LAST_NAMES)]
+                candidate = f"{contact_first.lower()}.{contact_last.lower()}@{slug}.com"
+                if candidate in contact_emails:
+                    candidate = f"{contact_first.lower()}.{contact_last.lower()}{change_number}@{slug}.com"
+                contact_emails.append(candidate)
         accounts.append({
             "id": stable_uuid("account", name),
             "agency_id": agency_id,
@@ -176,9 +197,11 @@ def build_accounts(rng: random.Random, agency_id: str) -> list[dict]:
             "_scenario_variant": scenario_variant,
             "contract_value_monthly": contract_value,
             "contract_start_date": contract_start.isoformat(),
-            "primary_contact_email": new_email or original_email,
+            "primary_contact_email": contact_emails[-1],
             "_original_contact_email": original_email,
-            "_new_contact_email": new_email,
+            "_new_contact_email": contact_emails[-1] if len(contact_emails) > 1 else None,
+            "_contact_emails": contact_emails,
+            "_contact_change_indexes": CONTACT_CHANGE_SCHEDULES.get(index, ()),
         })
     return accounts
 
@@ -204,6 +227,22 @@ def _snapshot_values(
     scheduled = base["scheduled"] + jitter(1)
     cancelled = base["cancelled"] + jitter(1)
     late = base["late"] + jitter(1)
+
+    # Real client telemetry breathes week to week even when its longer trend
+    # is stable. Distinct deterministic waves keep each signal legible without
+    # adding display-only noise or changing the evidence after generation.
+    week = progress * (WEEKS - 1)
+    phase = variant * 0.71
+    response_wave = math.sin(week * 0.83 + phase) + 0.45 * math.sin(week * 1.91 + 0.4)
+    thread_wave = math.sin(week * 0.61 + phase + 1.3) + 0.35 * math.sin(week * 1.57)
+    activity_wave = math.sin(week * 0.74 + phase + 0.8) + 0.5 * math.sin(week * 1.69 + 0.2)
+    cancellation_wave = math.sin(week * 0.92 + phase + 2.1) + 0.4 * math.sin(week * 1.43)
+    payment_wave = math.sin(week * 0.67 + phase + 2.7) + 0.45 * math.sin(week * 1.77 + 0.6)
+    response += response_wave * 1.7
+    threads += thread_wave * 5.0
+    scheduled += activity_wave * 1.9
+    cancelled += 2.2 + cancellation_wave * 1.7
+    late += 3.0 + payment_wave * 2.5
 
     if scenario == "new_account":
         # A short history should be visibly unscored/healthy by behaviour, not
@@ -234,7 +273,7 @@ def _snapshot_values(
         # modest communications drift, rather than masquerading as a full
         # multi-signal churn episode.
         late += (progress ** 1.35) * 34
-        response += (progress ** 1.35) * 9
+        response += (progress ** 1.35) * 10
     elif scenario == "cancellation_deterioration":
         onset = 0.68 + variant * 0.08
         severity = max(0.0, (progress - onset) / (1.0 - onset)) ** 2
@@ -305,7 +344,12 @@ def build_snapshots(rng: random.Random, account: dict, periods: list[tuple[date,
             progress=progress,
             base=base,
         )
-        contact_email = account.get("_new_contact_email") if account.get("_new_contact_email") and index == len(periods) - 1 else account["_original_contact_email"]
+        contact_email = account["_original_contact_email"]
+        for change_index, changed_email in zip(
+            account["_contact_change_indexes"], account["_contact_emails"][1:]
+        ):
+            if index >= change_index:
+                contact_email = changed_email
         snapshots.append({
             "id": stable_uuid("snapshot", account["id"], start.isoformat()),
             "account_id": account["id"],

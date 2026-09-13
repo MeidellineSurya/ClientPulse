@@ -2,11 +2,11 @@
 # using a fake Supabase client (no real database needed) injected via
 # FastAPI's dependency override.
 
-from fastapi.testclient import TestClient
-
 from app.auth import require_auth_context
 from app.dependencies import require_supabase_client
 from app.main import app
+from fastapi.testclient import TestClient
+
 from tests.fakes import FakeSupabaseClient, authenticated_context
 
 
@@ -186,6 +186,57 @@ def test_get_account_detail_flags_a_contact_change_in_the_history():
     body = response.json()
     assert body["contact_changed_at"] == "2026-01-14"
     assert body["previous_contact_email"] == "old@acme.com"
+
+
+def test_get_account_detail_returns_every_contact_change_event():
+    account_id = "11111111-1111-4111-8111-111111111111"
+    fake_client = FakeSupabaseClient(
+        {
+            "account": [
+                {
+                    "id": account_id,
+                    "name": "Acme",
+                    "contract_value_monthly": 10000,
+                    "contract_start_date": "2025-01-01",
+                    "primary_contact_email": "third@acme.com",
+                }
+            ],
+            "signal_snapshot": [
+                {**_snapshot(account_id, "2026-01-01"), "primary_contact_email": "first@acme.com"},
+                {
+                    **_snapshot(account_id, "2026-01-08", "2026-01-14"),
+                    "primary_contact_email": "second@acme.com",
+                },
+                {
+                    **_snapshot(account_id, "2026-01-15", "2026-01-21"),
+                    "primary_contact_email": "second@acme.com",
+                },
+                {
+                    **_snapshot(account_id, "2026-01-22", "2026-01-28"),
+                    "primary_contact_email": "third@acme.com",
+                },
+            ],
+        }
+    )
+    client = _override_client(fake_client)
+    try:
+        response = client.get(f"/accounts/{account_id}")
+    finally:
+        app.dependency_overrides.pop(require_supabase_client, None)
+
+    assert response.status_code == 200
+    assert response.json()["contact_events"] == [
+        {
+            "period_end": "2026-01-14",
+            "previous_contact_email": "first@acme.com",
+            "current_contact_email": "second@acme.com",
+        },
+        {
+            "period_end": "2026-01-28",
+            "previous_contact_email": "second@acme.com",
+            "current_contact_email": "third@acme.com",
+        },
+    ]
 
 
 def test_get_account_detail_no_contact_changed_at_when_contact_is_stable():

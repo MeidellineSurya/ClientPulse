@@ -151,6 +151,14 @@ class SignalSnapshotOut(BaseModel):
     primary_contact_email: str | None = None
 
 
+class ContactChangeEvent(BaseModel):
+    """One observed transition between known contact identities."""
+
+    period_end: date
+    previous_contact_email: str
+    current_contact_email: str
+
+
 class AccountDetail(BaseModel):
     # GET /accounts/{id}: account info + latest score + full signal history
     # + this account's alerts, in one response.
@@ -163,6 +171,7 @@ class AccountDetail(BaseModel):
     trend_slope: float | None
     health_computed_at: datetime | None
     signal_history: list[SignalSnapshotOut]
+    contact_events: list[ContactChangeEvent] = []
     alerts: list[AlertOut]
     # Most recent point-of-contact change detected in signal_history, if
     # any — see HANDOFF.md §13 and baseline_engine.derive_contact_changed.
