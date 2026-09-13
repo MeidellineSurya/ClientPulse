@@ -245,13 +245,14 @@ def _snapshot_values(
     late += 3.0 + payment_wave * 2.5
 
     if scenario == "new_account":
-        # A short history should be visibly unscored/healthy by behaviour, not
-        # accidentally land in Watch because a tiny random baseline is noisy.
-        response = base["response"]
-        threads = base["threads"]
-        scheduled = base["scheduled"]
-        cancelled = base["cancelled"]
-        late = base["late"]
+        # Six periods are still enough to show an honest cadence rather than a
+        # misleading flat placeholder while the account establishes a baseline.
+        short_index = min(5, round(progress * 5))
+        response = (2.5, 2.2, 2.7, 2.3, 2.8, 2.4)[short_index]
+        threads = (12, 15, 11, 14, 10, 13)[short_index]
+        scheduled = (4, 3, 5, 2, 4, 3)[short_index]
+        cancelled = (0, 1, 0, 2, 0, 1)[short_index]
+        late = (0, 1, 0, 2, 0, 1)[short_index]
 
     if scenario == "worsening":
         # Stagger the onset across accounts so the portfolio moves in waves

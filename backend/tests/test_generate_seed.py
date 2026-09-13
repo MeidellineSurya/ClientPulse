@@ -178,9 +178,8 @@ def test_every_established_account_signal_history_has_visible_turning_points():
     )
 
     for account in dataset["accounts"]:
-        if account["scenario"] == "new_account":
-            continue
         history = dataset["snapshots_by_account"][account["id"]]
+        minimum_distinct_values = 2 if account["scenario"] == "new_account" else 4
         for signal in displayed_signals:
             values = [row[signal] for row in history]
             directions = [
@@ -189,5 +188,5 @@ def test_every_established_account_signal_history_has_visible_turning_points():
                 if current != previous
             ]
             turns = sum(previous != current for previous, current in pairwise(directions))
-            assert len(set(values)) >= 4, (account["name"], signal)
+            assert len(set(values)) >= minimum_distinct_values, (account["name"], signal)
             assert turns >= 4, (account["name"], signal)
