@@ -102,6 +102,41 @@ def test_list_accounts_account_never_scored_has_null_score_fields():
     assert body[0]["health_computed_at"] is None
 
 
+def test_batch_history_endpoints_return_all_account_series_in_two_requests():
+    first = "11111111-1111-4111-8111-111111111111"
+    second = "22222222-2222-4222-8222-222222222222"
+    fake_client = FakeSupabaseClient(
+        {
+            "account": [
+                {"id": first, "name": "Acme", "contract_value_monthly": 10000},
+                {"id": second, "name": "Beta", "contract_value_monthly": 8000},
+            ],
+            "signal_snapshot": [
+                _snapshot(first, "2026-01-01"),
+                _snapshot(second, "2026-01-08", "2026-01-14"),
+            ],
+            "health_score": [
+                {"account_id": first, "composite_score": 20, "trend_slope": 1, "computed_at": "2026-01-07T00:00:00"},
+                {"account_id": second, "composite_score": 40, "trend_slope": 2, "computed_at": "2026-01-14T00:00:00"},
+            ],
+        }
+    )
+    client = _override_client(fake_client)
+    try:
+        signal_response = client.get("/accounts/signal-histories")
+        health_response = client.get("/accounts/health-histories")
+    finally:
+        app.dependency_overrides.pop(require_supabase_client, None)
+        app.dependency_overrides.pop(require_auth_context, None)
+
+    assert signal_response.status_code == 200
+    assert health_response.status_code == 200
+    assert set(signal_response.json()) == {first, second}
+    assert signal_response.json()[second][0]["period_start"] == "2026-01-08"
+    assert set(health_response.json()) == {first, second}
+    assert health_response.json()[first][0]["composite_score"] == 20
+
+
 def test_get_account_detail_includes_signal_history_and_alerts():
     fake_client = FakeSupabaseClient(
         {

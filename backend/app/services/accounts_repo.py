@@ -91,3 +91,44 @@ def fetch_full_signal_history(client: Client, account_id: str) -> list[dict]:
         .execute()
     )
     return sorted(resp.data, key=lambda row: row["period_start"])
+
+
+def fetch_signal_histories(
+    client: Client, account_ids: list[str], *, chunk_size: int = 20
+) -> dict[str, list[dict]]:
+    """Fetch complete signal histories in bounded batches, not one call per account."""
+    histories: dict[str, list[dict]] = {account_id: [] for account_id in account_ids}
+    columns = f"account_id, {SIGNAL_SNAPSHOT_COLUMNS}"
+    for offset in range(0, len(account_ids), chunk_size):
+        chunk = account_ids[offset : offset + chunk_size]
+        resp = (
+            client.table("signal_snapshot")
+            .select(columns)
+            .in_("account_id", chunk)
+            .execute()
+        )
+        for row in resp.data:
+            histories[row["account_id"]].append(row)
+    for rows in histories.values():
+        rows.sort(key=lambda row: row["period_start"])
+    return histories
+
+
+def fetch_health_score_histories(
+    client: Client, account_ids: list[str], *, chunk_size: int = 20
+) -> dict[str, list[dict]]:
+    """Fetch complete health histories in bounded batches, not one call per account."""
+    histories: dict[str, list[dict]] = {account_id: [] for account_id in account_ids}
+    for offset in range(0, len(account_ids), chunk_size):
+        chunk = account_ids[offset : offset + chunk_size]
+        resp = (
+            client.table("health_score")
+            .select("account_id, composite_score, trend_slope, computed_at")
+            .in_("account_id", chunk)
+            .execute()
+        )
+        for row in resp.data:
+            histories[row["account_id"]].append(row)
+    for rows in histories.values():
+        rows.sort(key=lambda row: row["computed_at"])
+    return histories

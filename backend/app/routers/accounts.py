@@ -16,9 +16,11 @@ from app.services.accounts_repo import (
     fetch_account,
     fetch_all_accounts,
     fetch_full_signal_history,
+    fetch_health_score_histories,
     fetch_health_score_history,
     fetch_latest_health_score,
     fetch_latest_health_scores,
+    fetch_signal_histories,
 )
 from app.services.alerts_repo import fetch_alerts_for_account
 from app.services.baseline_engine import derive_contact_changed
@@ -50,6 +52,34 @@ def list_accounts(
         )
         for account in accounts
     ]
+
+
+@router.get("/signal-histories", response_model=dict[str, list[SignalSnapshotOut]])
+def list_signal_histories(
+    auth: AuthContext = Depends(require_auth_context),  # noqa: B008 - FastAPI dependency
+) -> dict[str, list[SignalSnapshotOut]]:
+    account_ids = [
+        account["id"] for account in fetch_all_accounts(auth.client, auth.agency_id)
+    ]
+    histories = fetch_signal_histories(auth.client, account_ids)
+    return {
+        account_id: [SignalSnapshotOut(**row) for row in rows]
+        for account_id, rows in histories.items()
+    }
+
+
+@router.get("/health-histories", response_model=dict[str, list[HealthScorePoint]])
+def list_health_histories(
+    auth: AuthContext = Depends(require_auth_context),  # noqa: B008 - FastAPI dependency
+) -> dict[str, list[HealthScorePoint]]:
+    account_ids = [
+        account["id"] for account in fetch_all_accounts(auth.client, auth.agency_id)
+    ]
+    histories = fetch_health_score_histories(auth.client, account_ids)
+    return {
+        account_id: [HealthScorePoint(**row) for row in rows]
+        for account_id, rows in histories.items()
+    }
 
 
 @router.get("/{account_id}", response_model=AccountDetail)

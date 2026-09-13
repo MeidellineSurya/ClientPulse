@@ -53,8 +53,8 @@ export function AccountTable({ accounts, compact = false }: AccountTableProps) {
 
   const rows = useMemo(() => [...accounts].sort((a, b) => SORTS[sort](a, b) * dir), [accounts, sort, dir])
   const rowIds = useMemo(() => rows.map((a) => a.id), [rows])
-  const histories = useHealthHistories(rowIds)
-  const signalHistories = useSignalHistories(rowIds)
+  const { data: histories } = useHealthHistories(rowIds)
+  const { data: signalHistories } = useSignalHistories(rowIds)
 
   const toggle = (key: SortKey) => {
     if (sort === key) setDir(-dir)

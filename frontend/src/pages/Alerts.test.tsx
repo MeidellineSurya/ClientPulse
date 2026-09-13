@@ -7,6 +7,7 @@ import { afterEach, expect, it, vi } from "vitest"
 const api = vi.hoisted(() => ({
   listAlerts: vi.fn(),
   listAccounts: vi.fn(),
+  listSignalHistories: vi.fn(),
   setAlertStatus: vi.fn(),
 }))
 
