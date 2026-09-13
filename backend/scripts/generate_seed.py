@@ -43,7 +43,7 @@ ACCOUNT_NAMES = [
 # control: stable/noisy/recovery are false-positive traps; the deterioration
 # cases isolate individual signals; the new account tests short-history safety.
 SCENARIOS = (
-    ["stable"] * 18
+    ["stable"] * 16
     + ["worsening"] * 8
     + ["response_shock"] * 4
     + ["invoice_deterioration"] * 4
@@ -52,12 +52,14 @@ SCENARIOS = (
     + ["seasonal"] * 3
     + ["noisy_healthy"] * 3
     + ["new_account"]
+    + ["acute_churn"]
+    + ["contact_watch"]
 )
 assert len(ACCOUNT_NAMES) == len(SCENARIOS) == 48
 
 # Kept for compatibility with historical documentation and scenario tests.
 WORSENING_INDEXES = {index for index, scenario in enumerate(SCENARIOS) if scenario == "worsening"}
-CONTACT_TURNOVER_INDEXES = {7}
+CONTACT_TURNOVER_INDEXES = {47}
 CONTACT_FIRST_NAMES = ["Alex", "Jordan", "Sam", "Taylor", "Morgan", "Casey", "Riley", "Jamie"]
 CONTACT_LAST_NAMES = ["Reed", "Kim", "Patel", "Nguyen", "Ortiz", "Chen", "Brooks", "Diaz"]
 
@@ -120,21 +122,52 @@ def _snapshot_values(rng: random.Random, *, scenario: str, progress: float, base
     cancelled = base["cancelled"] + jitter(1)
     late = base["late"] + jitter(1)
 
+    if scenario == "new_account":
+        # A short history should be visibly unscored/healthy by behaviour, not
+        # accidentally land in Watch because a tiny random baseline is noisy.
+        response = base["response"]
+        threads = base["threads"]
+        scheduled = base["scheduled"]
+        cancelled = base["cancelled"]
+        late = base["late"]
+
     if scenario == "worsening":
-        severity = progress ** 1.6
-        response += severity * rng.uniform(10, 18)
-        threads -= severity * rng.uniform(8, 20)
-        scheduled -= severity * rng.uniform(1, 3)
-        cancelled += severity * rng.uniform(1, 3)
-        late += severity * rng.uniform(10, 22)
+        # These are the portfolio's sustained multi-signal At-risk examples:
+        # all eight finish clearly above the UI's 60-point risk cut-off.
+        # Keep the long baseline quiet, then deteriorate visibly across the
+        # final three displayed periods. This prevents the baseline itself
+        # absorbing the decline and hiding a genuine At-risk graph.
+        severity = max(0.0, (progress - 0.90) / 0.10)
+        response += severity * 30
+        threads -= severity * 24
+        scheduled -= severity * 5
+        cancelled += severity * 12
+        late += severity * 32
     elif scenario == "response_shock" and progress >= 0.92:
         response += 16 + (progress - 0.92) * 35
         threads -= 8
     elif scenario == "invoice_deterioration":
-        late += (progress ** 1.5) * 24
+        # Payment trouble is a Watch case only when it is accompanied by a
+        # modest communications drift, rather than masquerading as a full
+        # multi-signal churn episode.
+        late += (progress ** 1.35) * 34
+        response += (progress ** 1.35) * 9
     elif scenario == "cancellation_deterioration":
-        cancelled += (progress ** 1.5) * 5
-        scheduled -= (progress ** 1.2) * 2
+        severity = max(0.0, (progress - 0.90) / 0.10)
+        cancelled += severity * 20
+        scheduled -= severity * 6
+    elif scenario == "acute_churn" and progress >= 0.84:
+        # A late but sustained collapse across the final three plotted bars.
+        severity = (progress - 0.84) / 0.16
+        response += severity * 30
+        threads -= severity * 24
+        scheduled -= severity * 4
+        cancelled += severity * 8
+        late += severity * 34
+    elif scenario == "contact_watch":
+        # The discrete contact change adds 20 points; mild response drift
+        # supplies the remaining evidence needed for a Watch-tier graph.
+        response += (progress ** 1.5) * 11
     elif scenario == "recovery":
         # A genuine recovery after an initially poor period: it must not be
         # misrepresented as an active churn trend merely because its older
@@ -147,11 +180,11 @@ def _snapshot_values(rng: random.Random, *, scenario: str, progress: float, base
         late += severity * 16
     elif scenario == "seasonal":
         cycle = math.sin(progress * math.pi * 4)
-        response += cycle * 2.2
+        response += cycle * 2.2 + (progress ** 1.5) * 8
         threads -= cycle * 5
         scheduled -= cycle
-        cancelled += max(0.0, cycle * 1.5)
-        late += max(0.0, cycle * 3)
+        cancelled += max(0.0, cycle * 1.5) + (progress ** 1.5) * 4
+        late += max(0.0, cycle * 3) + (progress ** 1.5) * 5
     elif scenario == "noisy_healthy":
         response += jitter(2.5)
         threads += jitter(8)
