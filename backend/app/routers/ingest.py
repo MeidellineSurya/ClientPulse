@@ -20,7 +20,12 @@ from app.google_client import (
     get_gmail_service,
     get_google_credentials,
 )
-from app.schemas import CsvIngestResult, GmailCalendarIngestResult, UnmatchedInvoiceRow
+from app.schemas import (
+    CsvIngestResult,
+    GmailCalendarIngestResult,
+    GoogleIntegrationStatus,
+    UnmatchedInvoiceRow,
+)
 from app.services.calendar_signals import compute_calendar_signals, fetch_events
 from app.services.csv_ingest import parse_invoice_csv
 from app.services.csv_wiring import build_update_plan
@@ -85,6 +90,28 @@ async def ingest_csv(
         for u in unmatched
     ]
     return result
+
+
+@router.get("/gmail-calendar/status", response_model=GoogleIntegrationStatus)
+def get_google_integration_status(
+    auth: AuthContext = Depends(require_auth_context),  # noqa: B008 - FastAPI dependency
+) -> GoogleIntegrationStatus:
+    # Checks the same credentials/scope validation the real ingest call
+    # uses, without pulling any Gmail/Calendar data — lets the frontend
+    # show a real connected/not-connected state instead of a static claim.
+    try:
+        get_google_credentials(auth.agency_id)
+    except GoogleIntegrationNotFound:
+        return GoogleIntegrationStatus(
+            connected=False, detail="Google is not connected for this agency"
+        )
+    except RuntimeError as exc:
+        return GoogleIntegrationStatus(connected=False, detail=str(exc))
+    except GoogleAuthError:
+        return GoogleIntegrationStatus(
+            connected=False, detail="Google credentials could not be refreshed"
+        )
+    return GoogleIntegrationStatus(connected=True)
 
 
 @router.post("/gmail-calendar/{account_id}", response_model=GmailCalendarIngestResult)

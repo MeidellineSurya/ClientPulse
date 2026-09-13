@@ -6,6 +6,7 @@ from googleapiclient.errors import HttpError
 from httplib2 import Response, ServerNotFoundError
 
 from app.auth import require_auth_context
+from app.google_client import GoogleIntegrationNotFound
 from app.main import app
 from app.routers import ingest
 from app.services.calendar_signals import CalendarEvent
@@ -141,6 +142,76 @@ def test_gmail_calendar_rejects_reversed_period():
 
     assert response.status_code == 422
     assert response.json()["detail"] == "period_end must not be before period_start"
+
+
+def test_google_integration_status_reports_connected(monkeypatch):
+    fake = _client_with_account()
+    app.dependency_overrides[require_auth_context] = lambda: authenticated_context(fake)
+    monkeypatch.setattr(ingest, "get_google_credentials", lambda _agency_id: object())
+    try:
+        response = TestClient(app).get("/ingest/gmail-calendar/status")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json() == {"connected": True, "detail": None}
+
+
+def test_google_integration_status_reports_not_configured(monkeypatch):
+    fake = _client_with_account()
+    app.dependency_overrides[require_auth_context] = lambda: authenticated_context(fake)
+
+    def fail_credentials(_agency_id):
+        raise GoogleIntegrationNotFound
+
+    monkeypatch.setattr(ingest, "get_google_credentials", fail_credentials)
+    try:
+        response = TestClient(app).get("/ingest/gmail-calendar/status")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["connected"] is False
+    assert "not connected" in body["detail"]
+
+
+def test_google_integration_status_reports_missing_config(monkeypatch):
+    fake = _client_with_account()
+    app.dependency_overrides[require_auth_context] = lambda: authenticated_context(fake)
+
+    def fail_credentials(_agency_id):
+        raise RuntimeError("GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and GOOGLE_REFRESH_TOKEN must be set")
+
+    monkeypatch.setattr(ingest, "get_google_credentials", fail_credentials)
+    try:
+        response = TestClient(app).get("/ingest/gmail-calendar/status")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["connected"] is False
+    assert "GOOGLE_CLIENT_ID" in body["detail"]
+
+
+def test_google_integration_status_reports_refresh_failure(monkeypatch):
+    fake = _client_with_account()
+    app.dependency_overrides[require_auth_context] = lambda: authenticated_context(fake)
+
+    def fail_credentials(_agency_id):
+        raise RefreshError("refresh token was rejected")
+
+    monkeypatch.setattr(ingest, "get_google_credentials", fail_credentials)
+    try:
+        response = TestClient(app).get("/ingest/gmail-calendar/status")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["connected"] is False
+    assert "refreshed" in body["detail"]
 
 
 def test_gmail_calendar_returns_503_when_google_oauth_refresh_fails(monkeypatch):
