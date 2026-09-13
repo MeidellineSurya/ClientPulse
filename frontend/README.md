@@ -37,10 +37,12 @@ number the backend never actually computed.
 ```
 src/lib/api.ts          fetch wrapper — the only data boundary
 src/types/api.ts        types mirroring backend/app/schemas.py
-src/lib/format.ts       formatCurrency, riskTier, severityStyles, etc.
-src/lib/utils.ts        cn(), RISK_STYLES / HEX colour maps
-src/lib/useHealthHistories.ts  per-account health-history fetch/cache hook
-src/components/         AccountTable, TrendSparkline, layout/AppLayout, ui/*
+src/lib/format.ts       formatCurrency, riskTier, severityStyles, signalStatus, etc.
+src/lib/utils.ts        cn(), RISK_STYLES / HEX colour maps, nearestByDate
+src/lib/useCachedByIds.ts      shared cross-component fetch cache + concurrency throttle
+src/lib/useHealthHistories.ts  per-account health-history, built on useCachedByIds
+src/lib/useSignalHistories.ts  per-account raw signal history, built on useCachedByIds
+src/components/         AccountTable, AlertCard, TrendSparkline, layout/AppLayout, ui/*
 src/pages/              Portfolio, Accounts, AccountDetail, Alerts, Connections
 ```
 

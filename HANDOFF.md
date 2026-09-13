@@ -16,6 +16,12 @@ it's short on purpose.
 > hand-rolled components (see `frontend/reference/README.md`). Same data
 > boundary (`lib/api.ts`, `types/api.ts`) and business logic throughout;
 > only the UI layer changed.
+>
+> **Third update:** alert status transitions are no longer one-way — §4's
+> "no reopening resolved alerts, no moving backwards" is superseded.
+> Acknowledge/Resolve/Reopen/Unacknowledge all work in either direction now
+> (`app/routers/alerts.py`), so the UI can offer real undo instead of a
+> permanent lock-in.
 
 ---
 
