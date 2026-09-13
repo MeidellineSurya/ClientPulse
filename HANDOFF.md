@@ -8,8 +8,14 @@ it's short on purpose.
 > root — `frontend/`, `backend/`, `supabase/` are top-level folders, not
 > nested under a `/rapport` subfolder. The frontend stack also changed from
 > Next.js to **Vite + React + React Router** (still TypeScript, Tailwind,
-> shadcn/ui, Recharts). Pitch/product naming decisions in §7 are unaffected —
+> Recharts). Pitch/product naming decisions in §7 are unaffected —
 > flagging this here since it touches the repo layout in §4 and stack in §3.
+>
+> **Second update:** the frontend was later redesigned onto a custom flat
+> "Modernist" visual system — shadcn/ui and radix-ui are gone, replaced by
+> hand-rolled components (see `frontend/reference/README.md`). Same data
+> boundary (`lib/api.ts`, `types/api.ts`) and business logic throughout;
+> only the UI layer changed.
 
 ---
 
@@ -74,13 +80,31 @@ doc.
 - [x] Deterministic alert trigger implemented — `scoring_engine.py` confirmed as
       the sole decision engine, see ✅ below.
 - [x] Frontend (Vite + React) skeleton running — on `feat/frontend-app`, merged with
-      the latest `main`. TypeScript + Tailwind v4 + shadcn/ui + React Router + Recharts.
-- [x] Portfolio page — real data, sortable table, color-coded health scores, trend
-      arrows, total-at-risk-revenue summary bar
+      the latest `main`. TypeScript + Tailwind v4 + React Router + Recharts.
+      Later redesigned onto a custom flat/"Modernist" visual system (zero
+      border-radius, ink-on-light-ground, single red accent) — shadcn/ui and
+      radix-ui were dropped entirely in favor of hand-rolled components; see
+      `frontend/reference/README.md` for the design brief and the known gaps
+      it left (renewal date, score audit panel, baseline bands — deferred,
+      not forgotten).
+- [x] Portfolio page — real data, sortable table, color-coded risk scores, trend
+      arrows/sparklines, total-at-risk-revenue summary bar
+- [x] Accounts page (new) — full sortable/searchable/filterable book, split out
+      from Portfolio's shortlist view
 - [x] Account detail page — real Recharts trend charts per signal, composite-score
       history chart (via the new `/health-history` endpoint), revenue at risk
 - [x] Alerts inbox page — real alerts, status-update button wired to the live endpoint
-- [x] Settings/connections page — UI only, matches spec ("not wired up yet")
+- [x] Connections page (renamed from Settings) — UI only, matches spec ("not wired up yet")
+- [x] Per-account risk-score trend sparklines on the accounts table — one
+      `/accounts/:id/health-history` fetch per visible row, cached per mount.
+      Building this exposed that `/score/recompute` only ever persists the
+      *last* of the 3 scores it computes per call (see §5's trend-window
+      note) — every prior call against unchanged seed data had been
+      inserting duplicate points, not new ones. `backend/scripts/
+      backfill_health_history.py` is a one-time, idempotent script that
+      persists the other 2 already-computed-but-discarded points per
+      account, so the seed data's baked-in worsening trend (3 accounts,
+      see `WORSENING_INDEXES` in `generate_seed.py`) is actually visible.
 - [x] **Scoring engine implemented (the core feature — see §5)** — `baseline_engine.py`
       (rolling avg/stddev per signal) + `scoring_engine.py` (drift, weighted composite
       risk, worsening-trend-gated alert decision, exactly the §5 formula) +
@@ -126,7 +150,7 @@ doc.
 
 | Layer | Choice |
 |---|---|
-| Frontend | React (Vite) + TypeScript + React Router + Tailwind + shadcn/ui + Recharts |
+| Frontend | React (Vite) + TypeScript + React Router + Tailwind + Recharts — custom flat/Modernist design system, not shadcn/ui (dropped during the frontend redesign; see `frontend/reference/README.md`) |
 | Backend | FastAPI (Python) |
 | Database | Supabase (Postgres) |
 | LLM | Groq — `openai/gpt-oss-120b` |
@@ -205,6 +229,21 @@ account's *current* contact onto each period as it's ingested — it's how
 **Any already-provisioned Supabase project needs that migration applied**
 before deploying a backend built off this branch or later, the same as the
 alert-brief-persistence migration before it.
+
+Both migrations were committed to this repo well before either was
+actually run against the live project — and neither failure mode looked
+like a missing migration from the outside. Missing
+`primary_contact_email` 500'd every call to `fetch_signal_history`
+(`/score/recompute` and the new backfill script both use it), and missing
+`alert.revision` silently failed every new alert insert and brief update,
+swallowed by `/score/recompute`'s per-account error isolation into
+`failed_account_ids` rather than surfaced as an error. Both are now
+applied and verified against the live project (confirmed via a real
+`/score/recompute` returning `failed_account_ids: []` with alerts
+actually persisted). **Lesson for next time:** a migration file existing
+in the repo is not evidence it's been run — verify by querying the
+column/constraint directly, or by exercising the code path that depends
+on it, not by checking git log.
 
 ## 7. Decisions already made (don't relitigate mid-build)
 
