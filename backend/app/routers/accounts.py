@@ -20,6 +20,7 @@ from app.services.accounts_repo import (
     fetch_latest_health_scores,
 )
 from app.services.alerts_repo import fetch_alerts_for_account
+from app.services.baseline_engine import derive_contact_changed
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
 
@@ -65,6 +66,18 @@ def get_account_detail(
     signal_history = fetch_full_signal_history(client, account_key)
     alerts = fetch_alerts_for_account(client, account_key)
 
+    # The most recent period where derive_contact_changed detects a
+    # transition, if any — same derivation the scoring engine itself uses,
+    # so this always agrees with whether contact_changed actually
+    # contributed to that period's score (see HANDOFF.md §13).
+    contact_changed_at = None
+    previous_contact_email = None
+    annotated_history = derive_contact_changed(signal_history)
+    for previous_row, row in zip(signal_history, annotated_history[1:]):
+        if row["contact_changed"]:
+            contact_changed_at = row["period_end"]
+            previous_contact_email = previous_row.get("primary_contact_email")
+
     return AccountDetail(
         id=account["id"],
         name=account["name"],
@@ -76,6 +89,8 @@ def get_account_detail(
         health_computed_at=latest_score.get("computed_at"),
         signal_history=[SignalSnapshotOut(**row) for row in signal_history],
         alerts=alerts,
+        contact_changed_at=contact_changed_at,
+        previous_contact_email=previous_contact_email,
     )
 
 
