@@ -17,27 +17,23 @@ export function computeRevenueAtRisk(contractValueMonthly: number, compositeScor
   return contractValueMonthly * 12 * (compositeScore / 100)
 }
 
-export type HealthTier = "healthy" | "watch" | "at-risk" | "unscored"
+export type RiskTier = "healthy" | "watch" | "risk" | "unscored"
 
-export function healthTier(score: number | null): HealthTier {
+// Same cut points as RISK_ALERT_THRESHOLD (60) and the severity bands in
+// backend/app/services/scoring_engine.py — composite_score is a risk score,
+// higher is worse.
+export function riskTier(score: number | null): RiskTier {
   if (score === null) return "unscored"
-  if (score >= 60) return "at-risk"
+  if (score >= 60) return "risk"
   if (score >= 30) return "watch"
   return "healthy"
 }
 
-export const healthTierStyles: Record<HealthTier, string> = {
-  healthy: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300",
-  watch: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
-  "at-risk": "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
-  unscored: "bg-muted text-muted-foreground",
-}
-
 export const severityStyles: Record<string, string> = {
-  low: "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200",
-  medium: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
-  high: "bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300",
-  critical: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
+  low: "bg-neutral-200 text-neutral-800",
+  medium: "bg-watch-tint text-watch-ink",
+  high: "bg-risk-tint text-risk-ink",
+  critical: "bg-accent text-ground",
 }
 
 export function formatDate(iso: string): string {
