@@ -11,7 +11,9 @@ it("does not render protected application content without a session", () => {
       configured
       loading={false}
       signedIn={false}
+      requiresPasswordSetup={false}
       onSignIn={vi.fn()}
+      onSetPassword={vi.fn()}
     >
       <div>Private portfolio</div>
     </AuthGate>,
@@ -27,7 +29,9 @@ it("renders protected application content for an authenticated session", () => {
       configured
       loading={false}
       signedIn
+      requiresPasswordSetup={false}
       onSignIn={vi.fn()}
+      onSetPassword={vi.fn()}
     >
       <div>Private portfolio</div>
     </AuthGate>,

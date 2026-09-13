@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from "@testing-library/react"
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { useEffect, useState } from "react"
 import { afterEach, expect, it, vi } from "vitest"
 
@@ -11,6 +11,7 @@ const auth = vi.hoisted(() => ({
   })),
   signInWithPassword: vi.fn(),
   signOut: vi.fn(),
+  updateUser: vi.fn(),
 }))
 
 vi.mock("@/lib/supabase", () => ({
@@ -25,6 +26,7 @@ afterEach(() => {
   cleanup()
   setAccessTokenProvider(null)
   vi.unstubAllGlobals()
+  window.history.replaceState({}, "", "/")
 })
 
 it("recovers from a failed initial session lookup instead of loading forever", async () => {
@@ -76,4 +78,40 @@ it("installs the restored token before authenticated children request data", asy
       headers: expect.objectContaining({ Authorization: "Bearer restored-token" }),
     }),
   )
+})
+
+it("requires an invited user to set a password before opening the application", async () => {
+  window.history.replaceState({}, "", "/#type=invite&access_token=invite-token")
+  auth.getSession.mockResolvedValueOnce({
+    data: {
+      session: {
+        access_token: "invite-token",
+        user: { email: "owner@example.com" },
+      },
+    },
+  })
+  auth.updateUser.mockResolvedValueOnce({ error: null })
+
+  render(
+    <AuthProvider>
+      <div>Private portfolio</div>
+    </AuthProvider>,
+  )
+
+  expect(await screen.findByRole("heading", { name: "Set your password" })).toBeTruthy()
+  expect(screen.queryByText("Private portfolio")).toBeNull()
+
+  fireEvent.change(screen.getByLabelText("New password"), {
+    target: { value: "correct-horse-battery" },
+  })
+  fireEvent.change(screen.getByLabelText("Confirm password"), {
+    target: { value: "correct-horse-battery" },
+  })
+  fireEvent.click(screen.getByRole("button", { name: "Set password" }))
+
+  await waitFor(() => {
+    expect(auth.updateUser).toHaveBeenCalledWith({ password: "correct-horse-battery" })
+  })
+  expect(await screen.findByText("Private portfolio")).toBeTruthy()
+  expect(window.location.hash).toBe("")
 })

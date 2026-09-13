@@ -1,13 +1,16 @@
 import type { ReactNode } from "react"
 
 import { LoginForm } from "@/components/auth/LoginForm"
+import { PasswordSetupForm } from "@/components/auth/PasswordSetupForm"
 
 type AuthGateProps = {
   children: ReactNode
   configured: boolean
   loading: boolean
   signedIn: boolean
+  requiresPasswordSetup: boolean
   onSignIn: (email: string, password: string) => Promise<void>
+  onSetPassword: (password: string) => Promise<void>
 }
 
 export function AuthGate({
@@ -15,7 +18,9 @@ export function AuthGate({
   configured,
   loading,
   signedIn,
+  requiresPasswordSetup,
   onSignIn,
+  onSetPassword,
 }: AuthGateProps) {
   if (loading) {
     return (
@@ -55,6 +60,10 @@ export function AuthGate({
         </section>
       </main>
     )
+  }
+
+  if (requiresPasswordSetup) {
+    return <PasswordSetupForm onSetPassword={onSetPassword} />
   }
 
   return children
