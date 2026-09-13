@@ -7,6 +7,8 @@ The LLM is never involved in the score or alert decision — see HANDOFF.md
 plain language after the fact; it cannot change the score or the decision.
 """
 
+from dataclasses import replace
+
 from fastapi import APIRouter, Depends, HTTPException
 from supabase import Client
 
@@ -14,13 +16,18 @@ from app.db import get_supabase_client
 from app.schemas import AccountScoreResult, RecomputeScoringResponse
 from app.services.accounts_repo import fetch_account
 from app.services.brief_generation import build_alert_brief
-from app.services.scoring_engine import compute_revenue_at_risk, score_account_history
+from app.services.scoring_engine import (
+    SEVERITY_ORDER,
+    compute_revenue_at_risk,
+    score_account_history,
+)
 from app.services.scoring_repo import (
+    StaleAlertWriteError,
     fetch_accounts_with_contract_value,
     fetch_contract_value,
+    fetch_open_alert,
     fetch_signal_history,
     insert_health_score,
-    set_alert_brief,
     upsert_alert,
     upsert_baselines,
 )
@@ -45,9 +52,25 @@ def _score_and_persist(
     upsert_baselines(client, account_id, result.baselines)
     insert_health_score(client, account_id, result.composite_score, result.trend_slope)
     if result.alert_fired:
-        alert_id = upsert_alert(client, account_id, result.signals_fired, result.severity)
-        ai_brief, suggested_action = build_alert_brief(account_name, contract_value_monthly, result)
-        set_alert_brief(client, alert_id, ai_brief, suggested_action)
+        assert result.severity is not None
+        existing_alert = fetch_open_alert(client, account_id)
+        effective_severity = result.severity
+        if existing_alert is not None and SEVERITY_ORDER.index(existing_alert["severity"]) > SEVERITY_ORDER.index(
+            result.severity
+        ):
+            effective_severity = existing_alert["severity"]
+        ai_brief, suggested_action = build_alert_brief(
+            account_name, contract_value_monthly, replace(result, severity=effective_severity)
+        )
+        upsert_alert(
+            client,
+            account_id,
+            result.signals_fired,
+            effective_severity,
+            ai_brief=ai_brief,
+            suggested_action=suggested_action,
+            existing_alert=existing_alert,
+        )
 
     return AccountScoreResult(
         account_id=account_id,
@@ -63,7 +86,7 @@ def _score_and_persist(
 
 @router.post("/recompute/{account_id}", response_model=AccountScoreResult)
 def recompute_account_score(
-    account_id: str, client: Client = Depends(_require_supabase_client)
+    account_id: str, client: Client = Depends(_require_supabase_client)  # noqa: B008 - FastAPI dependency
 ) -> AccountScoreResult:
     history = fetch_signal_history(client, account_id)
     if not history:
@@ -71,11 +94,16 @@ def recompute_account_score(
     contract_value_monthly = fetch_contract_value(client, account_id)
     account = fetch_account(client, account_id)
     account_name = account["name"] if account else account_id
-    return _score_and_persist(client, account_id, history, contract_value_monthly, account_name)
+    try:
+        return _score_and_persist(client, account_id, history, contract_value_monthly, account_name)
+    except StaleAlertWriteError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.post("/recompute", response_model=RecomputeScoringResponse)
-def recompute_all_scores(client: Client = Depends(_require_supabase_client)) -> RecomputeScoringResponse:
+def recompute_all_scores(
+    client: Client = Depends(_require_supabase_client),  # noqa: B008 - FastAPI dependency
+) -> RecomputeScoringResponse:
     results = []
     failed_account_ids = []
     for account_id, (contract_value_monthly, account_name) in fetch_accounts_with_contract_value(client).items():
@@ -86,7 +114,7 @@ def recompute_all_scores(client: Client = Depends(_require_supabase_client)) -> 
                 # rather than fail the whole batch over one account.
                 continue
             results.append(_score_and_persist(client, account_id, history, contract_value_monthly, account_name))
-        except Exception:
+        except Exception:  # noqa: BLE001 - isolate each account in a batch
             # Isolate one account's bad data (e.g. a malformed
             # signal_snapshot value) or a transient write failure so it
             # can't take down scoring for the rest of the portfolio.

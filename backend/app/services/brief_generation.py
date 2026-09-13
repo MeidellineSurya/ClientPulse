@@ -28,6 +28,8 @@ def build_alert_brief(
     severity/history shape doesn't fit BriefContext's constraints.
     """
     try:
+        if result.severity is None:
+            raise ValueError("a fired alert must have a severity")
         recent_scores = tuple(score / 100 for score in result.period_scores[-3:])
         context = BriefContext(
             account_name=account_name,
@@ -38,10 +40,12 @@ def build_alert_brief(
             recent_scores=recent_scores,
         )
         brief = generate_brief(context, get_brief_provider())
-    except Exception:
+    except Exception:  # noqa: BLE001 - every provider failure must use the safe fallback
         return (
-            f"{account_name} is at {result.composite_score:.0f} "
-            f"({result.severity or 'elevated'}) retention risk after a worsening trend.",
+            (
+                f"{account_name} is at {result.composite_score:.0f} "
+                f"({result.severity or 'elevated'}) retention risk after a worsening trend."
+            ),
             "Review the account internally and agree on the next human follow-up.",
         )
 

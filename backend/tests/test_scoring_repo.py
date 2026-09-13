@@ -8,7 +8,6 @@ from app.services.scoring_repo import (
     fetch_signal_history,
     insert_alert,
     insert_health_score,
-    set_alert_brief,
     upsert_alert,
     upsert_baselines,
 )
@@ -117,9 +116,16 @@ def test_insert_alert_defaults_to_open_status_with_a_triggered_at_timestamp():
     assert rows[0]["triggered_at"]  # non-empty, set at insert time
 
 
-def test_set_alert_brief_updates_the_row():
-    client = FakeSupabaseClient({"alert": [{"id": "alert-1", "ai_brief": None, "suggested_action": None}]})
-    set_alert_brief(client, "alert-1", "Acme is trending worse.", "Schedule a check-in.")
+def test_insert_alert_persists_brief_with_alert_state():
+    client = FakeSupabaseClient({"alert": []})
+    insert_alert(
+        client,
+        "a1",
+        ["avg_response_time_hours"],
+        "high",
+        ai_brief="Acme is trending worse.",
+        suggested_action="Schedule a check-in.",
+    )
     row = client._tables["alert"][0]
     assert row["ai_brief"] == "Acme is trending worse."
     assert row["suggested_action"] == "Schedule a check-in."

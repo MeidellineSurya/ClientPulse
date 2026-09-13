@@ -7,10 +7,22 @@ a database.
 import uuid
 from datetime import datetime, timezone
 
+from postgrest.exceptions import APIError
 from supabase import Client
 
 from app.services.baseline_engine import TRACKED_SIGNALS
 from app.services.scoring_engine import SEVERITY_ORDER
+
+
+class StaleAlertWriteError(RuntimeError):
+    """The alert changed after scoring read it, so its evidence was not written."""
+
+
+class _FetchExistingAlert:
+    pass
+
+
+_FETCH_EXISTING_ALERT = _FetchExistingAlert()
 
 
 def fetch_contract_value(client: Client, account_id: str) -> float:
@@ -70,22 +82,38 @@ def insert_health_score(client: Client, account_id: str, composite_score: float,
     ).execute()
 
 
-def insert_alert(client: Client, account_id: str, signals_fired: list[str], severity: str) -> str:
+def insert_alert(
+    client: Client,
+    account_id: str,
+    signals_fired: list[str],
+    severity: str,
+    *,
+    ai_brief: str | None = None,
+    suggested_action: str | None = None,
+) -> str:
     # id and triggered_at are set explicitly (rather than left to
     # schema.sql's column defaults) so they're available immediately to the
-    # caller without a second round trip — the brief-generation step needs
-    # the id right away to attach ai_brief/suggested_action to this row.
+    # caller without a second round trip. Brief text is included in this same
+    # insert so an alert can never become visible in a partially-written state.
     alert_id = str(uuid.uuid4())
-    client.table("alert").insert(
-        {
-            "id": alert_id,
-            "account_id": account_id,
-            "signals_fired": signals_fired,
-            "severity": severity,
-            "status": "open",
-            "triggered_at": datetime.now(timezone.utc).isoformat(),
-        }
-    ).execute()
+    try:
+        client.table("alert").insert(
+            {
+                "id": alert_id,
+                "account_id": account_id,
+                "signals_fired": signals_fired,
+                "severity": severity,
+                "status": "open",
+                "revision": 0,
+                "triggered_at": datetime.now(timezone.utc).isoformat(),
+                "ai_brief": ai_brief,
+                "suggested_action": suggested_action,
+            }
+        ).execute()
+    except APIError as exc:
+        if exc.code == "23505":
+            raise StaleAlertWriteError("another recompute created an active alert first") from exc
+        raise
     return alert_id
 
 
@@ -95,7 +123,10 @@ def fetch_open_alert(client: Client, account_id: str) -> dict | None:
     time /score/recompute runs."""
     resp = (
         client.table("alert")
-        .select("id, severity, signals_fired, status, triggered_at")
+        .select(
+            "id, severity, signals_fired, ai_brief, suggested_action, "
+            "status, triggered_at, revision"
+        )
         .eq("account_id", account_id)
         .in_("status", ["open", "acknowledged"])
         .execute()
@@ -105,16 +136,49 @@ def fetch_open_alert(client: Client, account_id: str) -> dict | None:
     return max(resp.data, key=lambda row: row["triggered_at"])
 
 
-def update_alert_severity(client: Client, alert_id: str, severity: str, signals_fired: list[str]) -> None:
-    client.table("alert").update({"severity": severity, "signals_fired": signals_fired}).eq("id", alert_id).execute()
+def update_alert_evidence(
+    client: Client,
+    existing: dict,
+    severity: str,
+    signals_fired: list[str],
+    ai_brief: str | None,
+    suggested_action: str | None,
+) -> None:
+    expected_id = existing["id"]
+    expected_revision = int(existing.get("revision", 0))
+    response = (
+        client.table("alert")
+        .update(
+            {
+                "severity": severity,
+                "signals_fired": signals_fired,
+                "ai_brief": ai_brief,
+                "suggested_action": suggested_action,
+            }
+        )
+        .eq("id", expected_id)
+        .eq("revision", expected_revision)
+        .execute()
+    )
+    if len(response.data) != 1:
+        raise StaleAlertWriteError("alert changed while its brief was being generated")
 
 
-def upsert_alert(client: Client, account_id: str, signals_fired: list[str], severity: str) -> str:
+def upsert_alert(
+    client: Client,
+    account_id: str,
+    signals_fired: list[str],
+    severity: str,
+    *,
+    ai_brief: str | None = None,
+    suggested_action: str | None = None,
+    existing_alert: dict | None | _FetchExistingAlert = _FETCH_EXISTING_ALERT,
+) -> str:
     """Fires a new alert, or refreshes the account's existing open one in
     place, instead of always inserting — otherwise every /score/recompute
     call on a still-worsening account would add another row and flood the
-    alerts inbox with duplicates of the same underlying issue. Always
-    returns the alert's id, so the caller can attach a brief to it.
+    alerts inbox with duplicates of the same underlying issue. State and its
+    matching brief are written together; the alert id is returned as a receipt.
 
     severity only ever escalates (never downgrades) on an existing alert —
     triggered_at is preserved as "when this was first flagged" regardless.
@@ -124,19 +188,29 @@ def upsert_alert(client: Client, account_id: str, signals_fired: list[str], seve
     account whose problem shifted from, say, late invoices to cancelled
     meetings would keep showing the stale original cause.
     """
-    existing = fetch_open_alert(client, account_id)
+    existing = (
+        fetch_open_alert(client, account_id)
+        if isinstance(existing_alert, _FetchExistingAlert)
+        else existing_alert
+    )
     if existing is None:
-        return insert_alert(client, account_id, signals_fired, severity)
+        return insert_alert(
+            client,
+            account_id,
+            signals_fired,
+            severity,
+            ai_brief=ai_brief,
+            suggested_action=suggested_action,
+        )
 
     new_severity = (
         severity if SEVERITY_ORDER.index(severity) > SEVERITY_ORDER.index(existing["severity"]) else existing["severity"]
     )
-    if new_severity != existing["severity"] or signals_fired != existing.get("signals_fired"):
-        update_alert_severity(client, existing["id"], new_severity, signals_fired)
+    if (
+        new_severity != existing["severity"]
+        or signals_fired != existing.get("signals_fired")
+        or ai_brief != existing.get("ai_brief")
+        or suggested_action != existing.get("suggested_action")
+    ):
+        update_alert_evidence(client, existing, new_severity, signals_fired, ai_brief, suggested_action)
     return existing["id"]
-
-
-def set_alert_brief(client: Client, alert_id: str, ai_brief: str, suggested_action: str) -> None:
-    client.table("alert").update({"ai_brief": ai_brief, "suggested_action": suggested_action}).eq(
-        "id", alert_id
-    ).execute()
