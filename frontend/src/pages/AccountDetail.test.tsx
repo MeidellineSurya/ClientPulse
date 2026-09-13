@@ -39,7 +39,6 @@ function snapshot(index: number, email: string) {
     meetings_scheduled: 2 + (index % 3),
     meetings_cancelled: index % 4,
     invoice_days_late: index % 5,
-    email_thread_count: 12 + (index % 6),
     primary_contact_email: email,
   }
 }
@@ -105,11 +104,10 @@ it("renders real contact transitions as a three-event graph beside every numeric
   expect(screen.getByText("3 changes across 26 reporting periods")).toBeTruthy()
   expect(screen.getByLabelText("Contact change events over time")).toBeTruthy()
   expect(screen.getAllByTestId("contact-event-marker")).toHaveLength(3)
-  expect(screen.getAllByText("Email Thread Count")).toHaveLength(2)
   expect(screen.getByText(/first@acme.com → second@acme.com/)).toBeTruthy()
   expect(screen.getByText(/third@acme.com → fourth@acme.com/)).toBeTruthy()
   const chartLines = screen.getAllByTestId("chart-line")
-  expect(chartLines).toHaveLength(6)
+  expect(chartLines).toHaveLength(5)
   expect(chartLines.every((line) => line.dataset.lineType === "linear")).toBe(true)
   expect(chartLines.every((line) => line.dataset.hasDots === "true")).toBe(true)
 })

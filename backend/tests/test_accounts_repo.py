@@ -127,7 +127,6 @@ def test_fetch_full_signal_history_sorted_oldest_first():
                     "meetings_scheduled": 2,
                     "meetings_cancelled": 0,
                     "invoice_days_late": 0,
-                    "email_thread_count": 10,
                 },
                 {
                     "account_id": "a1",
@@ -137,7 +136,6 @@ def test_fetch_full_signal_history_sorted_oldest_first():
                     "meetings_scheduled": 3,
                     "meetings_cancelled": 0,
                     "invoice_days_late": 0,
-                    "email_thread_count": 8,
                 },
             ]
         }

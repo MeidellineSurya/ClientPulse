@@ -27,7 +27,6 @@ def _snapshot(account_id, period_start, period_end="2026-01-07"):
         "meetings_scheduled": 3,
         "meetings_cancelled": 0,
         "invoice_days_late": 0,
-        "email_thread_count": 12,
     }
 
 

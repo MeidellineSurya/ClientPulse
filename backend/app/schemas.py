@@ -51,7 +51,6 @@ class GmailCalendarIngestResult(BaseModel):
     period_start: date
     period_end: date
     avg_response_time_hours: float
-    email_thread_count: int
     meetings_scheduled: int
     meetings_cancelled: int
 
@@ -144,7 +143,6 @@ class SignalSnapshotOut(BaseModel):
     meetings_scheduled: int
     meetings_cancelled: int
     invoice_days_late: int
-    email_thread_count: int
     # Raw per-period contact email — not shown directly, but AccountDetail's
     # contact_changed_at/previous_contact_email (below) are derived from this
     # across the list. See baseline_engine.derive_contact_changed.

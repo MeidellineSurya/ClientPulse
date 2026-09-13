@@ -9,7 +9,7 @@ from supabase import Client
 
 SIGNAL_SNAPSHOT_COLUMNS = (
     "period_start, period_end, avg_response_time_hours, meetings_scheduled, "
-    "meetings_cancelled, invoice_days_late, email_thread_count, primary_contact_email"
+    "meetings_cancelled, invoice_days_late, primary_contact_email"
 )
 
 

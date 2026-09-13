@@ -59,7 +59,6 @@ create table if not exists signal_snapshot (
   meetings_scheduled       integer not null default 0,
   meetings_cancelled       integer not null default 0,
   invoice_days_late        integer not null default 0,
-  email_thread_count       integer not null default 0,
   primary_contact_email    text,
 
   constraint chk_signal_snapshot_period check (period_end >= period_start)

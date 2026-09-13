@@ -1,5 +1,5 @@
 """Pulls Gmail metadata for a client contact and computes
-avg_response_time_hours / email_thread_count for a signal_snapshot period.
+avg_response_time_hours for a signal_snapshot period.
 
 Only ever requests format="metadata" with an explicit header allowlist —
 never "full" or "raw" — so message bodies are never read, even transiently,
@@ -127,14 +127,13 @@ def fetch_message_metadata(
 
 def compute_email_signals(
     messages: list[MessageMetadata], contact_email: str
-) -> tuple[float, int]:
-    """Returns (avg_response_time_hours, email_thread_count).
+) -> float:
+    """Returns avg_response_time_hours.
 
     Response time is measured as the gap between an inbound message from
     contact_email and the next outbound message to them in the same
     thread (the agency's reply). Threads with no inbound->outbound pair
-    still count toward email_thread_count but don't contribute a response
-    time sample.
+    don't contribute a response time sample.
     """
     contact_email = contact_email.casefold()
 
@@ -163,4 +162,4 @@ def compute_email_signals(
     avg_response_time_hours = (
         sum(response_hours) / len(response_hours) if response_hours else 0.0
     )
-    return round(avg_response_time_hours, 2), len(by_thread)
+    return round(avg_response_time_hours, 2)
