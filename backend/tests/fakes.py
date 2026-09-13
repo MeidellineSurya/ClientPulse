@@ -2,6 +2,7 @@
 # query builder chain (select/in_/eq/update/insert/execute) so repo/router
 # logic can be tested without a real database.
 
+import json
 from types import SimpleNamespace
 
 
@@ -23,8 +24,18 @@ class FakeQuery:
         return self
 
     def eq(self, column: str, value) -> "FakeQuery":
-        self._rows = [r for r in self._rows if r.get(column) == value]
+        default = 0 if column == "revision" else None
+        self._rows = [r for r in self._rows if r.get(column, default) == value]
         return self
+
+    def filter(self, column: str, operator: str, criteria: str) -> "FakeQuery":
+        if operator != "eq":
+            raise NotImplementedError(f"FakeQuery does not support {operator}")
+        try:
+            value = json.loads(criteria)
+        except json.JSONDecodeError:
+            value = criteria
+        return self.eq(column, value)
 
     def update(self, payload: dict) -> "FakeQuery":
         self._payload = payload

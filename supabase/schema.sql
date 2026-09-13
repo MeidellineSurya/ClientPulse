@@ -92,11 +92,43 @@ create table if not exists alert (
   ai_brief          text,
   suggested_action  text,
   status            text not null default 'open',
+  revision          bigint not null default 0 check (revision >= 0),
 
   constraint chk_alert_severity check (severity in ('low', 'medium', 'high', 'critical')),
   constraint chk_alert_status check (status in ('open', 'acknowledged', 'resolved'))
 );
 
+-- CREATE TABLE IF NOT EXISTS does not add new columns to an existing project.
+-- Keep the canonical schema replayable as an upgrade as well as a fresh install.
+alter table alert
+  add column if not exists revision bigint not null default 0 check (revision >= 0);
+
+-- Every alert mutation advances a database-owned revision. The scoring API
+-- compares the revision it read before writing a generated brief, preventing
+-- stale recomputes from overwriting status changes or human-edited evidence.
+create or replace function public.bump_alert_revision()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.revision := old.revision + 1;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_alert_revision on alert;
+create trigger trg_alert_revision
+  before update on alert
+  for each row execute function public.bump_alert_revision();
+
 create index if not exists idx_alert_account_id on alert(account_id);
 create index if not exists idx_alert_triggered_at on alert(triggered_at desc);
 create index if not exists idx_alert_status on alert(status);
+
+-- Deduplication must be enforced in PostgreSQL, not by a SELECT followed by
+-- INSERT in the API: concurrent recomputes can otherwise create two active
+-- alerts for the same account. Resolved alerts do not participate, so a later
+-- deterioration episode can create a fresh row.
+create unique index if not exists uq_alert_one_active_per_account
+  on alert(account_id)
+  where status in ('open', 'acknowledged');
