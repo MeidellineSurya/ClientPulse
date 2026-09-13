@@ -59,7 +59,7 @@ def test_open_alert_status_update_is_idempotent():
     assert response.json()["status"] == "open"
 
 
-def test_acknowledged_alert_cannot_return_to_open():
+def test_acknowledged_alert_can_return_to_open():
     alert = _alert(status="acknowledged")
     fake = FakeSupabaseClient({"alert": [alert]})
     client = _client(fake)
@@ -68,25 +68,23 @@ def test_acknowledged_alert_cannot_return_to_open():
     finally:
         app.dependency_overrides.clear()
 
-    assert response.status_code == 409
-    assert response.json()["detail"] == "alert status cannot move backwards"
-    assert alert["status"] == "acknowledged"
+    assert response.status_code == 200
+    assert response.json()["status"] == "open"
+    assert alert["status"] == "open"
 
 
-def test_resolved_alert_cannot_be_reopened():
+def test_resolved_alert_can_be_reopened():
     alert = _alert(status="resolved")
     fake = FakeSupabaseClient({"alert": [alert]})
     client = _client(fake)
     try:
-        response = client.post(
-            f"/alerts/{ALERT_ID}/status", json={"status": "acknowledged"}
-        )
+        response = client.post(f"/alerts/{ALERT_ID}/status", json={"status": "open"})
     finally:
         app.dependency_overrides.clear()
 
-    assert response.status_code == 409
-    assert response.json()["detail"] == "resolved alerts cannot be reopened"
-    assert alert["status"] == "resolved"
+    assert response.status_code == 200
+    assert response.json()["status"] == "open"
+    assert alert["status"] == "open"
 
 
 def test_concurrent_alert_status_change_returns_conflict(monkeypatch):

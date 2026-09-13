@@ -1,8 +1,4 @@
-// Small display helpers. computeRevenueAtRisk mirrors
-// backend/app/services/scoring_engine.py's compute_revenue_at_risk exactly
-// (annualized contract value x composite_score/100) — duplicated here only
-// because /accounts doesn't currently return it, so the portfolio table can
-// still show a number consistent with what /score/recompute would report.
+// Small display helpers. computeRevenueAtRisk mirrors backend's compute_revenue_at_risk since /accounts doesn't return it directly.
 
 export function formatCurrency(value: number): string {
   return new Intl.NumberFormat("en-US", {
@@ -19,9 +15,7 @@ export function computeRevenueAtRisk(contractValueMonthly: number, compositeScor
 
 export type RiskTier = "healthy" | "watch" | "risk" | "unscored"
 
-// Same cut points as RISK_ALERT_THRESHOLD (60) and the severity bands in
-// backend/app/services/scoring_engine.py — composite_score is a risk score,
-// higher is worse.
+// Same cut points as backend/app/services/scoring_engine.py — composite_score is a risk score, higher is worse.
 export function riskTier(score: number | null): RiskTier {
   if (score === null) return "unscored"
   if (score >= 60) return "risk"
@@ -29,20 +23,97 @@ export function riskTier(score: number | null): RiskTier {
   return "healthy"
 }
 
+// Solid fills (not tints) so these badges stay visible on top of severity-tinted card backgrounds.
 export const severityStyles: Record<string, string> = {
-  low: "bg-neutral-200 text-neutral-800",
-  medium: "bg-watch-tint text-watch-ink",
-  high: "bg-risk-tint text-risk-ink",
+  low: "bg-neutral-300 text-neutral-800",
+  medium: "bg-watch text-ground",
+  high: "bg-risk text-ground",
   critical: "bg-accent text-ground",
+}
+
+// Mirrors backend HIGHER_IS_WORSE — meetings_scheduled is the odd one out, a drop is the risk direction.
+export const HIGHER_IS_WORSE: Partial<Record<string, boolean>> = {
+  avg_response_time_hours: true,
+  meetings_cancelled: true,
+  invoice_days_late: true,
+  meetings_scheduled: false,
+}
+
+export type SignalStatus = "good" | "watch" | "bad"
+
+// Colour-codes a value against that same account's own history (mean/stddev), never a fixed universal threshold.
+export function signalStatus(signal: string, value: number, allValues: number[]): SignalStatus {
+  if (allValues.length < 2) return "watch"
+  const mean = allValues.reduce((sum, v) => sum + v, 0) / allValues.length
+  const variance = allValues.reduce((sum, v) => sum + (v - mean) ** 2, 0) / allValues.length
+  const stddev = Math.sqrt(variance)
+  const higherIsWorse = HIGHER_IS_WORSE[signal] ?? true
+  const delta = higherIsWorse ? value - mean : mean - value
+  if (stddev === 0) return delta > 0 ? "watch" : "good"
+  const z = delta / stddev
+  if (z >= 1) return "bad"
+  if (z > 0.15) return "watch"
+  return "good"
+}
+
+export const SIGNAL_STATUS_TEXT: Record<SignalStatus, string> = {
+  good: "text-healthy-ink",
+  watch: "text-watch-ink",
+  bad: "text-risk-ink",
 }
 
 export function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
 }
 
+// Overrides where the generic split-and-capitalize reads awkwardly (the unit is already shown via formatSignalValue).
+const SIGNAL_LABEL_OVERRIDE: Record<string, string> = {
+  avg_response_time_hours: "Avg Response Time",
+}
+
 export function formatSignalName(signal: string): string {
-  return signal
-    .split("_")
-    .map((w) => w[0].toUpperCase() + w.slice(1))
-    .join(" ")
+  return (
+    SIGNAL_LABEL_OVERRIDE[signal] ??
+    signal
+      .split("_")
+      .map((w) => w[0].toUpperCase() + w.slice(1))
+      .join(" ")
+  )
+}
+
+const SIGNAL_UNIT: Partial<Record<string, (v: number) => string>> = {
+  avg_response_time_hours: (v) => `${v.toFixed(1)}h`,
+  invoice_days_late: (v) => `${v.toFixed(0)}d`,
+}
+
+// Single source of signal-value formatting so every chart's ticks/tooltips stay in sync.
+export function formatSignalValue(signal: string, value: number): string {
+  return (SIGNAL_UNIT[signal] ?? ((v: number) => v.toFixed(0)))(value)
+}
+
+// contact_changed is a point-in-time flag, not a continuous metric, so it's excluded from this trend-history list.
+export const TRACKED_SIGNALS = ["avg_response_time_hours", "meetings_cancelled", "invoice_days_late", "meetings_scheduled"] as const
+
+// Product policy, not backend-enforced — the bar the UI holds a score to before treating it as trustworthy.
+export const MIN_DATA_COVERAGE_DAYS = 90
+
+export interface DataCoverage {
+  days: number
+  isSufficient: boolean
+  daysRemaining: number
+}
+
+// Real span of an account's actual signal_snapshot history — never a fabricated or assumed number.
+export function computeDataCoverage(history: Array<{ period_start: string; period_end: string }>): DataCoverage {
+  if (history.length === 0) {
+    return { days: 0, isSufficient: false, daysRemaining: MIN_DATA_COVERAGE_DAYS }
+  }
+  const start = new Date(history[0].period_start).getTime()
+  const end = new Date(history[history.length - 1].period_end).getTime()
+  const days = Math.max(0, Math.round((end - start) / 86_400_000))
+  return {
+    days,
+    isSufficient: days >= MIN_DATA_COVERAGE_DAYS,
+    daysRemaining: Math.max(0, MIN_DATA_COVERAGE_DAYS - days),
+  }
 }

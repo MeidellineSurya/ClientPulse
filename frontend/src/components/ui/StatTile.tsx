@@ -1,4 +1,5 @@
-import type { ReactNode } from "react"
+import type { CSSProperties, ReactNode } from "react"
+import type { LucideIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
@@ -7,15 +8,29 @@ interface StatTileProps {
   value: ReactNode
   sub?: ReactNode
   accent?: boolean
+  icon?: LucideIcon
+  valueClassName?: string
   className?: string
+  style?: CSSProperties
 }
 
-// One cell of the ruled metric strip. Never a floating card — the grid does the work.
-export function StatTile({ label, value, sub, accent, className }: StatTileProps) {
+// One block of the metric group — a standalone tinted rectangle, not a table cell.
+export function StatTile({ label, value, sub, accent, icon: Icon, valueClassName, className, style }: StatTileProps) {
   return (
-    <div className={cn("border-r border-divider px-6 py-4 last:border-r-0", className)}>
-      <div className="kicker">{label}</div>
-      <div className={cn("mt-1 text-[26px] font-extrabold tracking-[-0.03em]", accent && "text-accent-700")}>{value}</div>
+    <div style={style} className={cn("animate-[row-in_320ms_cubic-bezier(0.16,1,0.3,1)_backwards] bg-surface px-4 py-5 sm:px-6", className)}>
+      <div className="flex items-center gap-2 kicker">
+        {Icon && <Icon size={15} strokeWidth={2.4} />}
+        {label}
+      </div>
+      <div
+        className={cn(
+          "mt-2.5 break-words text-[clamp(36px,5.5vw,64px)] font-extrabold tabular-nums leading-none tracking-[-0.03em]",
+          accent && "text-accent-700",
+          valueClassName,
+        )}
+      >
+        {value}
+      </div>
       {sub && <div className="text-[12px] text-neutral-700">{sub}</div>}
     </div>
   )

@@ -15,7 +15,7 @@ export function Segmented<T extends string>({ name, options, value, onChange }: 
         <label
           key={opt}
           className={cn(
-            "cursor-pointer whitespace-nowrap border-r border-divider px-3 py-1.5 text-[12px] font-extrabold last:border-r-0",
+            "cursor-pointer whitespace-nowrap border-r border-divider px-3 py-1.5 text-[12px] font-extrabold transition-colors duration-150 last:border-r-0",
             value === opt ? "bg-accent text-ground" : "hover:bg-ink/[0.06]",
           )}
         >

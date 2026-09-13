@@ -1,21 +1,22 @@
-import { Activity, LogOut } from "lucide-react"
+import { Activity, LayoutDashboard, LogOut, Plug, TriangleAlert, Users } from "lucide-react"
 import { useEffect, useState } from "react"
-import { NavLink, Outlet } from "react-router-dom"
+import { NavLink, Outlet, useLocation } from "react-router-dom"
 
 import { useAuth } from "@/components/auth/auth-context"
 import { api } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
 const NAV_ITEMS = [
-  { to: "/", label: "Portfolio", end: true },
-  { to: "/accounts", label: "Accounts", end: false },
-  { to: "/alerts", label: "Alerts", end: false },
-  { to: "/connections", label: "Connections", end: false },
+  { to: "/", label: "Portfolio", end: true, icon: LayoutDashboard },
+  { to: "/accounts", label: "Accounts", end: false, icon: Users },
+  { to: "/alerts", label: "Alerts", end: false, icon: TriangleAlert },
+  { to: "/connections", label: "Connections", end: false, icon: Plug },
 ]
 
 export function AppLayout() {
   const [openAlerts, setOpenAlerts] = useState(0)
   const { email, signOut } = useAuth()
+  const location = useLocation()
 
   useEffect(() => {
     api
@@ -42,14 +43,21 @@ export function AppLayout() {
               end={item.end}
               className={({ isActive }) =>
                 cn(
-                  "flex items-center justify-between border-l-[3px] px-[18px] py-2.5 text-[13px] font-extrabold",
-                  isActive ? "border-accent bg-ink/[0.08] text-ink" : "border-transparent text-neutral-700 hover:bg-ink/[0.06]",
+                  "flex items-center justify-between border-l-[3px] px-[18px] py-2.5 text-[13px] font-extrabold transition-colors duration-150",
+                  isActive
+                    ? "border-accent bg-ink/[0.08] text-ink"
+                    : "border-transparent text-neutral-700 hover:bg-ink/[0.06]",
                 )
               }
             >
-              <span>{item.label}</span>
+              <span className="flex items-center gap-2.5">
+                <item.icon size={18} strokeWidth={2.2} />
+                {item.label}
+              </span>
               {item.label === "Alerts" && openAlerts > 0 && (
-                <span className="bg-accent px-1.5 text-[10px] font-extrabold text-ground">{openAlerts}</span>
+                <span className="bg-accent px-1.5 text-[10px] font-extrabold text-ground">
+                  {openAlerts}
+                </span>
               )}
             </NavLink>
           ))}
@@ -69,7 +77,9 @@ export function AppLayout() {
       </aside>
 
       <main className="min-w-0 flex-1">
-        <Outlet />
+        <div key={location.pathname} className="animate-[page-in_260ms_cubic-bezier(0.16,1,0.3,1)_both]">
+          <Outlet />
+        </div>
       </main>
     </div>
   )

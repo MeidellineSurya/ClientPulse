@@ -23,6 +23,10 @@ display any real account's score.
   needs per-signal drift/contribution data. The real `GET /accounts/:id`
   response doesn't expose `signal_contributions` (only `POST /score/recompute`
   does) — the panel was dropped rather than re-deriving the math client-side.
-- **Baseline bands on signal charts**: the "normally X, now Y" comparison
-  needs each signal's baseline average/stddev, which isn't exposed by any GET
-  endpoint. Signal charts show raw history only, without the baseline band.
+- **Baseline bands on signal charts**: closed, differently than the design mock
+  assumed. No GET endpoint exposes the backend's baseline average/stddev, so
+  instead of a literal band the UI derives its own good/watch/bad colour-coding
+  client-side from the same `signal_history` array the chart already renders
+  (mean/stddev of the visible points — see `signalStatus()` in `src/lib/format.ts`).
+  It's a display heuristic, not the deterministic score, and is labelled as such
+  wherever it's shown.

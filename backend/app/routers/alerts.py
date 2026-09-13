@@ -41,15 +41,7 @@ def _transition_alert_status(
     existing = fetch_alert(client, alert_key, agency_id)
     if existing is None:
         raise HTTPException(status_code=404, detail=f"alert {alert_key} not found")
-    if existing["status"] == "resolved" and body.status != "resolved":
-        raise HTTPException(
-            status_code=409, detail="resolved alerts cannot be reopened"
-        )
-    status_rank = {"open": 0, "acknowledged": 1, "resolved": 2}
-    if status_rank[body.status] < status_rank[existing["status"]]:
-        raise HTTPException(
-            status_code=409, detail="alert status cannot move backwards"
-        )
+    # Status moves freely in both directions — acknowledging/resolving is never a one-way door.
     account_name = fetch_account_name(client, existing["account_id"], agency_id)
     if existing["status"] == body.status:
         return AlertOut(**existing, account_name=account_name)
