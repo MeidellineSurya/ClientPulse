@@ -75,3 +75,27 @@ def test_seed_dataset_is_deterministic_for_a_fixed_anchor_date():
     second = generate_seed.build_seed_dataset(random.Random(generate_seed.RNG_SEED), agency_id, anchor_end=generate_seed.date(2026, 9, 6))
 
     assert first == second
+
+
+def test_demo_alert_profiles_cover_varied_lifecycle_states_and_severities():
+    agency_id = generate_seed.stable_uuid("agency", "StudioCo")
+    dataset = generate_seed.build_seed_dataset(
+        random.Random(generate_seed.RNG_SEED),
+        agency_id,
+        anchor_end=generate_seed.date(2026, 9, 13),
+    )
+
+    profiles = generate_seed.build_demo_alert_profiles(dataset["accounts"])
+
+    assert len(profiles) == 15
+    assert Counter(profile["status"] for profile in profiles.values()) == {
+        "open": 5,
+        "acknowledged": 4,
+        "resolved": 6,
+    }
+    assert Counter(profile["severity"] for profile in profiles.values()) == {
+        "low": 3,
+        "medium": 5,
+        "high": 4,
+        "critical": 3,
+    }

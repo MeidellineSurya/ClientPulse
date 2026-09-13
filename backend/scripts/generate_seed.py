@@ -63,6 +63,32 @@ CONTACT_TURNOVER_INDEXES = {47}
 CONTACT_FIRST_NAMES = ["Alex", "Jordan", "Sam", "Taylor", "Morgan", "Casey", "Riley", "Jamie"]
 CONTACT_LAST_NAMES = ["Reed", "Kim", "Patel", "Nguyen", "Ortiz", "Chen", "Brooks", "Diaz"]
 
+# Deterministic demo inbox coverage. These are presentation fixtures for a
+# realistic mixed queue, not inputs to scoring or alert decisions.
+DEMO_ALERT_PROFILES_BY_SCENARIO = {
+    "worsening": [
+        ("open", "critical"),
+        ("open", "high"),
+        ("open", "medium"),
+        ("acknowledged", "critical"),
+        ("acknowledged", "high"),
+        ("acknowledged", "medium"),
+        ("resolved", "high"),
+        ("resolved", "low"),
+    ],
+    "response_shock": [
+        ("open", "high"),
+        ("acknowledged", "medium"),
+        ("resolved", "medium"),
+        ("resolved", "low"),
+    ],
+    "recovery": [
+        ("resolved", "low"),
+        ("resolved", "medium"),
+    ],
+    "acute_churn": [("open", "critical")],
+}
+
 
 def slugify(name: str) -> str:
     return name.lower().replace(" & ", "-").replace(" ", "-").replace("--", "-")
@@ -70,6 +96,22 @@ def slugify(name: str) -> str:
 
 def stable_uuid(*parts: str) -> str:
     return str(uuid.uuid5(NAMESPACE, ":".join(parts)))
+
+
+def build_demo_alert_profiles(accounts: list[dict]) -> dict[str, dict[str, str]]:
+    """Return a deterministic mixed alert lifecycle for the demo inbox."""
+    seen = Counter()
+    profiles = {}
+    for account in accounts:
+        scenario = account["scenario"]
+        ordinal = seen[scenario]
+        seen[scenario] += 1
+        options = DEMO_ALERT_PROFILES_BY_SCENARIO.get(scenario, [])
+        if ordinal >= len(options):
+            continue
+        status, severity = options[ordinal]
+        profiles[account["id"]] = {"status": status, "severity": severity}
+    return profiles
 
 
 def sql_str(value: str) -> str:

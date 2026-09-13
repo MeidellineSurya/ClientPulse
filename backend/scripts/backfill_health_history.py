@@ -1,22 +1,12 @@
-"""One-time backfill: persists the per-period composite risk scores the
-scoring engine already computes for each account's trend window (see
-score_account_history in app/services/scoring_engine.py) but that
-/score/recompute only ever saves the *last* of.
+"""Backfill a no-lookahead composite-risk curve for each account.
 
-Why this exists: calling POST /score/recompute repeatedly against
-unchanged signal_snapshot data always recomputes the same latest score and
-inserts another identical health_score row - it can never produce a
-trend line, because the earlier 1-2 scores in the 3-period trend window
-are computed and then discarded. This script reruns that same scoring
-math (via the real functions, not a reimplementation) and writes a
-health_score row for every trend-window period that isn't already
-represented, dated to that period's period_end - so the account-detail
-chart and the accounts-table sparkline show the real drift already baked
-into the seed data (see WORSENING_INDEXES in generate_seed.py) instead of
-a flat line of duplicate "latest" values.
+For every period after the minimum baseline plus trend-window history exists,
+this script runs the real scoring engine against that point-in-time prefix and
+persists the resulting latest score. The account-detail chart and table
+sparkline therefore show an actual trajectory rather than three repetitions of
+today's score.
 
-Idempotent: skips any (account, date) pair that already has a health_score
-row, so re-running this is a no-op once backfilled.
+Idempotent: skips any (account, date) pair already represented.
 
 Run from backend/ (so it picks up backend/.env):
     cd backend && python scripts/backfill_health_history.py
@@ -24,27 +14,30 @@ Run from backend/ (so it picks up backend/.env):
 
 from datetime import datetime, timezone
 
+from app.config import settings
 from app.db import get_supabase_client
 from app.services.accounts_repo import fetch_all_accounts, fetch_health_score_history
-from app.services.baseline_engine import TRACKED_SIGNALS, compute_baselines, derive_contact_changed, split_baseline_and_trend_windows
-from app.services.scoring_engine import compute_composite_risk, compute_trend_slope
+from app.services.baseline_engine import MIN_BASELINE_SIZE, TREND_WINDOW
+from app.services.scoring_engine import compute_trend_slope, score_account_history
 from app.services.scoring_repo import fetch_signal_history
 
 
 def compute_period_scores(history: list[dict]) -> tuple[list[dict], list[float]]:
-    """Mirrors score_account_history's own per-period loop (same baseline,
-    same per-row composite_risk), just returning every period's score
-    instead of only the last."""
-    history = derive_contact_changed(history)
-    baseline_window, trend_window = split_baseline_and_trend_windows(history)
-    baselines = compute_baselines(baseline_window)
+    """Return a no-lookahead score curve from successive history prefixes.
 
-    period_scores = []
-    for row in trend_window:
-        current_signals = {signal: float(row[signal]) for signal in TRACKED_SIGNALS if row.get(signal) is not None}
-        score, _ = compute_composite_risk(current_signals, baselines)
-        period_scores.append(score)
-    return trend_window, period_scores
+    The first score is emitted once there are enough rows for both the minimum
+    baseline and the three-period trend window. Each later point recomputes the
+    real scoring engine using only data available as of that period.
+    """
+    first_scored_size = MIN_BASELINE_SIZE + TREND_WINDOW
+    periods = []
+    scores = []
+    for prefix_size in range(first_scored_size, len(history) + 1):
+        prefix = history[:prefix_size]
+        result = score_account_history(prefix)
+        periods.append(prefix[-1])
+        scores.append(result.composite_score)
+    return periods, scores
 
 
 def backfill_account(client, account_id: str, account_name: str) -> int:
@@ -78,8 +71,10 @@ def backfill_account(client, account_id: str, account_name: str) -> int:
 
 
 def main() -> None:
+    if not settings.google_agency_id:
+        raise SystemExit("GOOGLE_AGENCY_ID is required to scope the backfill")
     client = get_supabase_client()
-    accounts = fetch_all_accounts(client)
+    accounts = fetch_all_accounts(client, settings.google_agency_id)
     print(f"Backfilling health_score history for {len(accounts)} accounts...")
     total = 0
     for account in accounts:

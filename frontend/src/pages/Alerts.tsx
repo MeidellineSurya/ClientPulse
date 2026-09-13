@@ -43,7 +43,14 @@ export function Alerts() {
     setUpdatingId(alert.id)
     try {
       const updated = await api.setAlertStatus(alert.id, nextStatus)
-      setAlerts((prev) => prev?.map((a) => (a.id === alert.id ? updated : a)) ?? null)
+      setAlerts(
+        (prev) =>
+          prev?.map((a) =>
+            a.id === alert.id
+              ? { ...updated, account_name: updated.account_name ?? a.account_name }
+              : a,
+          ) ?? null,
+      )
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to update alert")
     } finally {
