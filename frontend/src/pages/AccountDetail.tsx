@@ -96,6 +96,13 @@ export function AccountDetail() {
             <div className="mt-1 text-[13.5px] text-neutral-700">
               client since {formatDate(account.contract_start_date)} · {account.primary_contact_email ?? "no contact on file"}
             </div>
+            {account.contact_changed_at && (
+              <div className="mt-2.5 inline-block border-l-4 border-accent-700 bg-accent-100 py-1.5 pl-3 pr-4 text-[12.5px]">
+                <span className="font-extrabold uppercase tracking-[0.05em] text-accent-700">New point of contact</span>{" "}
+                as of {formatDate(account.contact_changed_at)}: {account.primary_contact_email}
+                {account.previous_contact_email && <> (was {account.previous_contact_email})</>}
+              </div>
+            )}
           </div>
 
           <div className="flex items-stretch">
