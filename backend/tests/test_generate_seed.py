@@ -1,7 +1,7 @@
 """Regression tests for the deterministic ClientPulse demonstration dataset."""
 
 import random
-from collections import Counter
+from collections import Counter, defaultdict
 from itertools import pairwise
 from typing import cast
 
@@ -71,6 +71,33 @@ def test_seed_dataset_populates_dashboard_risk_and_watch_tiers_with_distinct_sce
     assert scenario_tiers["contact_watch"] == {"watch"}
 
 
+def test_contact_events_do_not_create_synchronized_portfolio_score_spikes():
+    from scripts.backfill_health_history import compute_period_scores
+
+    agency_id = generate_seed.stable_uuid("agency", "StudioCo")
+    dataset = generate_seed.build_seed_dataset(
+        random.Random(generate_seed.RNG_SEED),
+        agency_id,
+        anchor_end=generate_seed.date(2026, 9, 13),
+    )
+    scores_by_period = defaultdict(list)
+    for account in dataset["accounts"]:
+        if account["scenario"] == "new_account":
+            continue
+        periods, scores = compute_period_scores(dataset["snapshots_by_account"][account["id"]])
+        for period, score in zip(periods, scores):
+            scores_by_period[period["period_end"]].append(score)
+
+    portfolio_curve = [
+        sum(scores) / len(scores)
+        for _period, scores in sorted(scores_by_period.items())
+    ]
+    weekly_changes = [current - previous for previous, current in pairwise(portfolio_curve)]
+
+    assert max(abs(change) for change in weekly_changes) <= 8
+    assert sum(change > 0 for change in weekly_changes) >= 5
+    assert sum(change < 0 for change in weekly_changes) >= 5
+
 
 def test_seed_dataset_is_deterministic_for_a_fixed_anchor_date():
     agency_id = generate_seed.stable_uuid("agency", "StudioCo")
@@ -134,7 +161,7 @@ def test_demo_alert_profiles_cover_varied_lifecycle_states_and_severities():
         assert recent_cancelled > early_cancelled
 
 
-def test_contact_alerts_have_multiple_real_history_events():
+def test_many_accounts_have_substantial_contact_history_while_alerts_remain_evidence_backed():
     agency_id = generate_seed.stable_uuid("agency", "StudioCo")
     dataset = generate_seed.build_seed_dataset(
         random.Random(generate_seed.RNG_SEED),
@@ -142,24 +169,35 @@ def test_contact_alerts_have_multiple_real_history_events():
         anchor_end=generate_seed.date(2026, 9, 13),
     )
     profiles = generate_seed.build_demo_alert_profiles(dataset["accounts"])
-    contact_accounts = [
+    contact_history_accounts = [
+        account for account in dataset["accounts"] if account["_contact_change_indexes"]
+    ]
+    contact_alert_accounts = [
         account
         for account in dataset["accounts"]
         if "contact_changed"
         in cast(list[str], profiles.get(account["id"], {}).get("signals_fired", []))
     ]
 
-    assert len(contact_accounts) == 4
-    assert Counter(profiles[account["id"]]["status"] for account in contact_accounts) == {
+    assert len(contact_history_accounts) == 20
+    assert len(contact_alert_accounts) == 4
+    assert {account["id"] for account in contact_alert_accounts} <= {
+        account["id"] for account in contact_history_accounts
+    }
+    assert Counter(profiles[account["id"]]["status"] for account in contact_alert_accounts) == {
         "open": 1,
         "acknowledged": 1,
         "resolved": 2,
     }
-    for account in contact_accounts:
+    event_counts = {}
+    for account in contact_history_accounts:
         history = derive_contact_changed(
             dataset["snapshots_by_account"][account["id"]]
         )
-        assert sum(row["contact_changed"] for row in history) == 3
+        event_counts[account["id"]] = sum(row["contact_changed"] for row in history)
+
+    assert set(event_counts.values()) == {4}
+    assert sum(event_counts.values()) == 80
 
 
 def test_every_established_account_signal_history_has_visible_turning_points():

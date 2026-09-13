@@ -59,16 +59,21 @@ assert len(ACCOUNT_NAMES) == len(SCENARIOS) == 48
 
 # Kept for compatibility with historical documentation and scenario tests.
 WORSENING_INDEXES = {index for index, scenario in enumerate(SCENARIOS) if scenario == "worsening"}
-# Four accounts carry real, staggered contact histories. Each tuple contains
-# the zero-based reporting periods where a known contact transitions to a new
-# known identity; only Orbit's final event is currently active.
+# Twenty accounts carry four real, staggered contact transitions so the event
+# visualization is meaningful across the portfolio. The first 19 schedules are
+# evenly phase-shifted across historical periods to avoid a synthetic portfolio
+# spike; Orbit retains the one currently active change.
+CONTACT_HISTORY_INDEXES = (
+    1, 3, 5, 7, 9, 11, 13, 15, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36,
+)
 CONTACT_CHANGE_SCHEDULES = {
-    13: (5, 12, 19),
-    24: (6, 14, 22),
-    36: (4, 11, 18),
-    47: (6, 15, 25),
+    index: tuple(sorted(2 + ((ordinal + change_number * 5) % 19) for change_number in range(4)))
+    for ordinal, index in enumerate(CONTACT_HISTORY_INDEXES)
 }
-CONTACT_TURNOVER_INDEXES = set(CONTACT_CHANGE_SCHEDULES)
+CONTACT_CHANGE_SCHEDULES[47] = (3, 10, 17, 25)
+# Alerts remain selective: every alert has history evidence, but historical
+# turnover alone does not manufacture an active queue item for all 20 accounts.
+CONTACT_ALERT_INDEXES = {13, 24, 36, 47}
 CONTACT_FIRST_NAMES = ["Alex", "Jordan", "Sam", "Taylor", "Morgan", "Casey", "Riley", "Jamie"]
 CONTACT_LAST_NAMES = ["Reed", "Kim", "Patel", "Nguyen", "Ortiz", "Chen", "Brooks", "Diaz"]
 
@@ -142,16 +147,16 @@ def build_demo_alert_profiles(accounts: list[dict]) -> dict[str, dict[str, objec
         ordinal = seen[scenario]
         seen[scenario] += 1
         options = DEMO_ALERT_PROFILES_BY_SCENARIO.get(scenario, [])
-        has_contact_history = bool(account.get("_contact_change_indexes"))
+        has_contact_alert = bool(account.get("_has_contact_alert"))
         if ordinal >= len(options):
-            if not has_contact_history:
+            if not has_contact_alert:
                 continue
             status, severity = "resolved", "low"
             signals = []
         else:
             status, severity = options[ordinal]
             signals = list(DEMO_ALERT_SIGNALS_BY_SCENARIO[scenario])
-        if has_contact_history and "contact_changed" not in signals:
+        if has_contact_alert and "contact_changed" not in signals:
             signals.append("contact_changed")
         profiles[account["id"]] = {
             "status": status,
@@ -181,8 +186,9 @@ def build_accounts(rng: random.Random, agency_id: str) -> list[dict]:
         slug = slugify(name)
         original_email = f"{first.lower()}.{last.lower()}@{slug}.com"
         contact_emails = [original_email]
-        if index in CONTACT_TURNOVER_INDEXES:
-            for change_number in range(1, 4):
+        contact_change_indexes = CONTACT_CHANGE_SCHEDULES.get(index, ())
+        if contact_change_indexes:
+            for change_number in range(1, len(contact_change_indexes) + 1):
                 contact_first = CONTACT_FIRST_NAMES[(index + change_number * 2) % len(CONTACT_FIRST_NAMES)]
                 contact_last = CONTACT_LAST_NAMES[(index + change_number * 3) % len(CONTACT_LAST_NAMES)]
                 candidate = f"{contact_first.lower()}.{contact_last.lower()}@{slug}.com"
@@ -201,7 +207,8 @@ def build_accounts(rng: random.Random, agency_id: str) -> list[dict]:
             "_original_contact_email": original_email,
             "_new_contact_email": contact_emails[-1] if len(contact_emails) > 1 else None,
             "_contact_emails": contact_emails,
-            "_contact_change_indexes": CONTACT_CHANGE_SCHEDULES.get(index, ()),
+            "_contact_change_indexes": contact_change_indexes,
+            "_has_contact_alert": index in CONTACT_ALERT_INDEXES,
         })
     return accounts
 
