@@ -4,6 +4,9 @@ Behavioral churn early-warning tool for retainer-based agencies. Surfaces accoun
 that are quietly drifting toward churn (slower replies, more cancellations, late
 invoices) before the client says anything.
 
+**🌐 Live:** [clientpulse-frontend.onrender.com](https://clientpulse-frontend.onrender.com)
+(backend: [backend-ruddy-rho-34.vercel.app](https://backend-ruddy-rho-34.vercel.app))
+
 > 🚧 Hackathon build. This repo is being scaffolded incrementally — see commit
 > history for progress. Backend + frontend are live and verified end-to-end
 > against a real Supabase project, including real Groq-generated AI briefs on
@@ -21,7 +24,10 @@ invoices) before the client says anything.
 - **Backend:** FastAPI (Python 3.11+), Pydantic
 - **Database:** Supabase (Postgres)
 - **LLM:** Groq (`openai/gpt-oss-120b`)
-- **Deploy:** Vercel (frontend), Railway (backend)
+- **Deploy:** frontend on Render (static site), backend on Vercel (Python ASGI
+  serverless function) — switched from the original Vercel/Railway split
+  after both Railway and Render's compute tier required a card on file;
+  Render's static-site tier and Vercel's Python runtime needed neither
 
 ## Monorepo layout
 
@@ -89,5 +95,7 @@ and falls back rather than crashing.
       project with real LLM-generated briefs
 - [x] React (Vite) frontend — Portfolio, Account Detail, Alerts, Settings, all
       wired to the real backend, verified in an actual browser session
-- [ ] Deployment (Vercel + Railway)
+- [x] Deployment — frontend live on Render, backend live on Vercel (Python
+      ASGI serverless), both verified end-to-end in a real browser session
+      against the actual production URLs
 - [ ] Demo run-through rehearsed end to end
