@@ -37,8 +37,8 @@ afterEach(() => {
 it("keeps the account name visible after an alert is acknowledged then resolved", async () => {
   api.listAlerts.mockResolvedValue([initialAlert])
   api.setAlertStatus
-    .mockResolvedValueOnce({ ...initialAlert, status: "acknowledged" })
-    .mockResolvedValueOnce({ ...initialAlert, status: "resolved" })
+    .mockResolvedValueOnce({ ...initialAlert, account_name: null, status: "acknowledged" })
+    .mockResolvedValueOnce({ ...initialAlert, account_name: null, status: "resolved" })
 
   render(
     <MemoryRouter>
