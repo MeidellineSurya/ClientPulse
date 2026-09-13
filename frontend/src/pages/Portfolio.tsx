@@ -27,10 +27,10 @@ function getGreeting() {
 
 const SHORT_SIGNAL_LABEL: Record<string, string> = {
   avg_response_time_hours: "Response time",
-  meetings_cancelled: "Cancelled",
-  contact_changed: "Contact change",
   invoice_days_late: "Late invoices",
-  meetings_scheduled: "Scheduled",
+  meetings_scheduled: "Meeting Scheduled",
+  meetings_cancelled: "Meeting Cancelled",
+  contact_changed: "Contact change",
 }
 
 // Every signal the scoring engine tracks, in weight order — shown even at 0 so nothing silently drops off the chart.
