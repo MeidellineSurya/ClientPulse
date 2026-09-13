@@ -1,5 +1,6 @@
 """Supabase Auth bearer validation and resolved agency context."""
 
+import time
 from dataclasses import dataclass
 
 from fastapi import Depends, HTTPException
@@ -8,6 +9,10 @@ from gotrue.errors import AuthError, AuthRetryableError
 from supabase import Client
 
 from app.dependencies import require_supabase_client
+
+# A transient Supabase Auth disconnect (AuthRetryableError) is worth one immediate retry before surfacing a 503.
+AUTH_RETRY_ATTEMPTS = 2
+AUTH_RETRY_DELAY_SECONDS = 0.15
 
 
 @dataclass(frozen=True)
@@ -39,14 +44,25 @@ def require_auth_context(
     if credentials.scheme.lower() != "bearer" or not credentials.credentials.strip():
         raise _unauthorized()
 
-    try:
-        response = client.auth.get_user(credentials.credentials.strip())
-    except AuthRetryableError as exc:
+    token = credentials.credentials.strip()
+    last_retryable_error: AuthRetryableError | None = None
+    response = None
+    for attempt in range(AUTH_RETRY_ATTEMPTS):
+        try:
+            response = client.auth.get_user(token)
+            last_retryable_error = None
+            break
+        except AuthRetryableError as exc:
+            last_retryable_error = exc
+            if attempt < AUTH_RETRY_ATTEMPTS - 1:
+                time.sleep(AUTH_RETRY_DELAY_SECONDS)
+        except AuthError as exc:
+            raise _unauthorized("invalid bearer token") from exc
+    if last_retryable_error is not None:
         raise HTTPException(
             status_code=503, detail="authentication service unavailable"
-        ) from exc
-    except AuthError as exc:
-        raise _unauthorized("invalid bearer token") from exc
+        ) from last_retryable_error
+    assert response is not None  # loop only exits via break or the raise above
     user = response.user
     if user is None:
         raise _unauthorized("invalid bearer token")
