@@ -36,7 +36,9 @@ const SHORT_SIGNAL_LABEL: Record<string, string> = {
 // Every signal the scoring engine tracks, in weight order — shown even at 0 so nothing silently drops off the chart.
 const ALL_SIGNALS = Object.keys(SHORT_SIGNAL_LABEL)
 
-// contact_changed is a point-in-time flag, not a continuous metric, so it's excluded from trend lines here.
+// contact_changed isn't a raw signal_snapshot field, so it can't be averaged
+// directly here — it's derived separately below (see deriveContactChangedFlags)
+// and merged into trendMap alongside these.
 const TREND_SIGNALS: Array<keyof SignalSnapshot> = [
   "avg_response_time_hours",
   "meetings_cancelled",
@@ -45,6 +47,20 @@ const TREND_SIGNALS: Array<keyof SignalSnapshot> = [
 ]
 
 type TrendPoint = { period: string; value: number }
+type SignalTrend = { signal: string; series: TrendPoint[] }
+
+// Mirrors baseline_engine.derive_contact_changed: a transition only counts
+// between two known, different emails, so missing history can't manufacture
+// a false positive. Returns one 0/1 flag per row, aligned by index.
+function deriveContactChangedFlags(history: SignalSnapshot[]): number[] {
+  let previousEmail: string | null = null
+  return history.map((row, index) => {
+    const email = row.primary_contact_email
+    const changed = index > 0 && previousEmail !== null && email !== null && email !== previousEmail
+    previousEmail = email
+    return changed ? 1 : 0
+  })
+}
 
 function trendDirection(signal: string, series: TrendPoint[]): "worse" | "better" | "flat" | "unknown" {
   if (series.length < 2) return "unknown"
@@ -150,11 +166,35 @@ export function Portfolio() {
       }),
     }))
   }, [signalHistories])
+  // Share of accounts reporting a contact change that period — the same
+  // "average across accounts" shape as portfolioSignalTrends above, just
+  // fed from a derived flag instead of a raw signal_snapshot column.
+  const contactChangeTrend = useMemo((): SignalTrend => {
+    const byPeriod = new Map<string, { sum: number; count: number }>()
+    for (const history of Object.values(signalHistories)) {
+      const flags = deriveContactChangedFlags(history)
+      history.forEach((row, index) => {
+        const entry = byPeriod.get(row.period_start) ?? { sum: 0, count: 0 }
+        entry.sum += flags[index]
+        entry.count += 1
+        byPeriod.set(row.period_start, entry)
+      })
+    }
+    const periods = [...byPeriod.keys()].sort()
+    return {
+      signal: "contact_changed",
+      series: periods.map((period) => {
+        const entry = byPeriod.get(period)!
+        return { period, value: entry.sum / entry.count }
+      }),
+    }
+  }, [signalHistories])
   const signalCountMap = useMemo(() => new Map<string, number>(signalCounts), [signalCounts])
-  const trendMap = useMemo(
-    () => new Map<string, (typeof portfolioSignalTrends)[number]>(portfolioSignalTrends.map((t) => [t.signal, t])),
-    [portfolioSignalTrends],
-  )
+  const trendMap = useMemo(() => {
+    const map = new Map<string, SignalTrend>(portfolioSignalTrends.map((t) => [t.signal, t]))
+    map.set(contactChangeTrend.signal, contactChangeTrend)
+    return map
+  }, [portfolioSignalTrends, contactChangeTrend])
 
   const totalCountDisplay = useCountUp(accounts?.length ?? 0, 500)
   const healthyRevenueDisplay = useCountUp(healthyRevenue, 800)

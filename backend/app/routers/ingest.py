@@ -141,9 +141,7 @@ async def ingest_gmail_calendar(
             detail="Google Gmail/Calendar request failed",
         ) from exc
 
-    avg_response_time_hours, email_thread_count = compute_email_signals(
-        messages, contact_email
-    )
+    avg_response_time_hours = compute_email_signals(messages, contact_email)
     meetings_scheduled, meetings_cancelled = compute_calendar_signals(
         events, contact_email
     )
@@ -154,7 +152,6 @@ async def ingest_gmail_calendar(
         period_start.isoformat(),
         period_end.isoformat(),
         avg_response_time_hours,
-        email_thread_count,
         meetings_scheduled,
         meetings_cancelled,
         primary_contact_email=contact_email,
@@ -165,7 +162,6 @@ async def ingest_gmail_calendar(
         period_start=period_start,
         period_end=period_end,
         avg_response_time_hours=avg_response_time_hours,
-        email_thread_count=email_thread_count,
         meetings_scheduled=meetings_scheduled,
         meetings_cancelled=meetings_cancelled,
     )

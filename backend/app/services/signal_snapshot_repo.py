@@ -79,7 +79,6 @@ def upsert_gmail_calendar_signals(
     period_start: str,
     period_end: str,
     avg_response_time_hours: float,
-    email_thread_count: int,
     meetings_scheduled: int,
     meetings_cancelled: int,
     primary_contact_email: str | None = None,
@@ -99,7 +98,6 @@ def upsert_gmail_calendar_signals(
     """
     payload: dict[str, float | str] = {
         "avg_response_time_hours": avg_response_time_hours,
-        "email_thread_count": email_thread_count,
         "meetings_scheduled": meetings_scheduled,
         "meetings_cancelled": meetings_cancelled,
     }

@@ -85,7 +85,6 @@ def test_gmail_calendar_ingestion_writes_computed_live_signals(monkeypatch):
         "period_start": "2026-09-01",
         "period_end": "2026-09-07",
         "avg_response_time_hours": 3.0,
-        "email_thread_count": 1,
         "meetings_scheduled": 1,
         "meetings_cancelled": 1,
     }
@@ -96,7 +95,6 @@ def test_gmail_calendar_ingestion_writes_computed_live_signals(monkeypatch):
         "period_end": "2026-09-07",
         "invoice_days_late": 4,
         "avg_response_time_hours": 3.0,
-        "email_thread_count": 1,
         "meetings_scheduled": 1,
         "meetings_cancelled": 1,
         "primary_contact_email": "client@example.com",

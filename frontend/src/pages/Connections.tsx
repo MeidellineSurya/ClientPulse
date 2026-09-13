@@ -7,9 +7,9 @@ const CONNECTIONS = [
   {
     icon: Mail,
     title: "Gmail",
-    description: "Pulls response-time and thread-count signals from metadata only — message bodies are never read.",
+    description: "Pulls response-time signals from metadata only — message bodies are never read.",
     scope: "Reads timestamps and participant counts only. Message subject and body are never read or stored.",
-    signals: ["avg_response_time_hours", "email_thread_count"],
+    signals: ["avg_response_time_hours"],
     connected: false,
   },
   {

@@ -171,7 +171,6 @@ def test_every_established_account_signal_history_has_visible_turning_points():
     )
     displayed_signals = (
         "avg_response_time_hours",
-        "email_thread_count",
         "meetings_scheduled",
         "meetings_cancelled",
         "invoice_days_late",

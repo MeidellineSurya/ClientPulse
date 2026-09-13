@@ -223,7 +223,6 @@ def _snapshot_values(
 ) -> dict:
     jitter = lambda spread: rng.uniform(-spread, spread)
     response = base["response"] + jitter(0.6)
-    threads = base["threads"] + jitter(3)
     scheduled = base["scheduled"] + jitter(1)
     cancelled = base["cancelled"] + jitter(1)
     late = base["late"] + jitter(1)
@@ -234,12 +233,10 @@ def _snapshot_values(
     week = progress * (WEEKS - 1)
     phase = variant * 0.71
     response_wave = math.sin(week * 0.83 + phase) + 0.45 * math.sin(week * 1.91 + 0.4)
-    thread_wave = math.sin(week * 0.61 + phase + 1.3) + 0.35 * math.sin(week * 1.57)
     activity_wave = math.sin(week * 0.74 + phase + 0.8) + 0.5 * math.sin(week * 1.69 + 0.2)
     cancellation_wave = math.sin(week * 0.92 + phase + 2.1) + 0.4 * math.sin(week * 1.43)
     payment_wave = math.sin(week * 0.67 + phase + 2.7) + 0.45 * math.sin(week * 1.77 + 0.6)
     response += response_wave * 1.7
-    threads += thread_wave * 5.0
     scheduled += activity_wave * 1.9
     cancelled += 2.2 + cancellation_wave * 1.7
     late += 3.0 + payment_wave * 2.5
@@ -249,7 +246,6 @@ def _snapshot_values(
         # misleading flat placeholder while the account establishes a baseline.
         short_index = min(5, round(progress * 5))
         response = (2.5, 2.2, 2.7, 2.3, 2.8, 2.4)[short_index]
-        threads = (12, 15, 11, 14, 10, 13)[short_index]
         scheduled = (4, 3, 5, 2, 4, 3)[short_index]
         cancelled = (0, 1, 0, 2, 0, 1)[short_index]
         late = (0, 1, 0, 2, 0, 1)[short_index]
@@ -260,7 +256,6 @@ def _snapshot_values(
         onset = 0.58 + variant * 0.04
         severity = max(0.0, (progress - onset) / (1.0 - onset)) ** 2
         response += severity * 34
-        threads -= severity * 28
         scheduled -= severity * 6
         cancelled += severity * 14
         late += severity * 38
@@ -268,7 +263,6 @@ def _snapshot_values(
         onset = 0.72 + variant * 0.04
         severity = max(0.0, (progress - onset) / (1.0 - onset)) ** 2
         response += severity * 20
-        threads -= severity * 8
     elif scenario == "invoice_deterioration":
         # Payment trouble is a Watch case only when it is accompanied by a
         # modest communications drift, rather than masquerading as a full
@@ -286,7 +280,6 @@ def _snapshot_values(
         onset = 0.70
         severity = max(0.0, (progress - onset) / (1.0 - onset)) ** 2
         response += severity * 30
-        threads -= severity * 24
         scheduled -= severity * 4
         cancelled += severity * 8
         late += severity * 34
@@ -300,27 +293,23 @@ def _snapshot_values(
         # history was bad.
         severity = max(0.0, 1.0 - max(0.0, progress - 0.45) / 0.55)
         response += severity * 13
-        threads -= severity * 10
         scheduled -= severity * 2
         cancelled += severity * 3
         late += severity * 16
     elif scenario == "seasonal":
         cycle = math.sin(progress * math.pi * 4)
         response += cycle * 2.2 + (progress ** 1.5) * 8
-        threads -= cycle * 5
         scheduled -= cycle
         cancelled += max(0.0, cycle * 1.5) + (progress ** 1.5) * 4
         late += max(0.0, cycle * 3) + (progress ** 1.5) * 5
     elif scenario == "noisy_healthy":
         response += jitter(2.5)
-        threads += jitter(8)
         scheduled += jitter(2)
         cancelled += jitter(2)
         late += jitter(3)
 
     return {
         "avg_response_time_hours": round(clamp(response, 0.5, 48.0), 2),
-        "email_thread_count": max(1, round(threads)),
         "meetings_scheduled": max(0, round(scheduled)),
         "meetings_cancelled": max(0, round(cancelled)),
         "invoice_days_late": max(0, round(late)),
@@ -330,7 +319,6 @@ def _snapshot_values(
 def build_snapshots(rng: random.Random, account: dict, periods: list[tuple[date, date]]) -> list[dict]:
     base = {
         "response": rng.uniform(2.0, 6.0),
-        "threads": rng.randint(15, 40),
         "scheduled": rng.randint(2, 5),
         "cancelled": rng.choice([0, 0, 0, 1]),
         "late": rng.choice([0, 0, 1, 2]),
@@ -399,11 +387,11 @@ def render_sql(agency_id: str, accounts: list[dict], snapshots_by_account: dict[
         for account in accounts
     ]
     lines.extend([",\n".join(account_rows) + ";", ""])
-    lines.append("insert into signal_snapshot (id, account_id, period_start, period_end, avg_response_time_hours, email_thread_count, meetings_scheduled, meetings_cancelled, invoice_days_late, primary_contact_email) values")
+    lines.append("insert into signal_snapshot (id, account_id, period_start, period_end, avg_response_time_hours, meetings_scheduled, meetings_cancelled, invoice_days_late, primary_contact_email) values")
     snapshot_rows = [
-        "  ({id}, {account_id}, {start}, {end}, {response}, {threads}, {scheduled}, {cancelled}, {late}, {email})".format(
+        "  ({id}, {account_id}, {start}, {end}, {response}, {scheduled}, {cancelled}, {late}, {email})".format(
             id=sql_str(snapshot["id"]), account_id=sql_str(snapshot["account_id"]), start=sql_str(snapshot["period_start"]),
-            end=sql_str(snapshot["period_end"]), response=snapshot["avg_response_time_hours"], threads=snapshot["email_thread_count"],
+            end=sql_str(snapshot["period_end"]), response=snapshot["avg_response_time_hours"],
             scheduled=snapshot["meetings_scheduled"], cancelled=snapshot["meetings_cancelled"], late=snapshot["invoice_days_late"], email=sql_str(snapshot["primary_contact_email"]),
         )
         for account in accounts for snapshot in snapshots_by_account[account["id"]]

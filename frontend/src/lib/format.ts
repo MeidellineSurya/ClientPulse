@@ -86,7 +86,6 @@ export function formatSignalValue(signal: string, value: number): string {
 // contact_changed is a point-in-time flag, not a continuous metric, so it's excluded from this trend-history list.
 export const TRACKED_SIGNALS = [
   "avg_response_time_hours",
-  "email_thread_count",
   "meetings_cancelled",
   "invoice_days_late",
   "meetings_scheduled",

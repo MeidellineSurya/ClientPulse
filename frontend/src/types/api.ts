@@ -19,7 +19,6 @@ export interface SignalSnapshot {
   meetings_scheduled: number
   meetings_cancelled: number
   invoice_days_late: number
-  email_thread_count: number
   primary_contact_email: string | null
 }
 
