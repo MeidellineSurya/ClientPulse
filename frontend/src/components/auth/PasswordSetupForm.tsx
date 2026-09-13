@@ -1,8 +1,5 @@
 import { useState, type FormEvent } from "react"
 
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-
 type PasswordSetupFormProps = {
   onSetPassword: (password: string) => Promise<void>
 }
@@ -35,14 +32,14 @@ export function PasswordSetupForm({ onSetPassword }: PasswordSetupFormProps) {
   }
 
   return (
-    <main className="grid min-h-screen place-items-center bg-background px-6">
+    <main className="grid min-h-screen place-items-center bg-ground px-6">
       <section className="w-full max-w-sm space-y-8">
         <header className="space-y-2">
-          <p className="text-sm font-medium tracking-wide text-muted-foreground">
+          <p className="text-sm font-extrabold tracking-[0.1em] text-neutral-600">
             CLIENTPULSE
           </p>
           <h1 className="text-3xl font-semibold tracking-tight">Set your password</h1>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-neutral-600">
             Finish accepting your invitation to open the StudioCo workspace.
           </p>
         </header>
@@ -51,7 +48,8 @@ export function PasswordSetupForm({ onSetPassword }: PasswordSetupFormProps) {
             <label className="text-sm font-medium" htmlFor="new-password">
               New password
             </label>
-            <Input
+            <input
+              className="w-full border-2 border-divider bg-ground px-3 py-2 text-sm outline-none focus:border-ink"
               id="new-password"
               type="password"
               autoComplete="new-password"
@@ -65,7 +63,8 @@ export function PasswordSetupForm({ onSetPassword }: PasswordSetupFormProps) {
             <label className="text-sm font-medium" htmlFor="confirm-password">
               Confirm password
             </label>
-            <Input
+            <input
+              className="w-full border-2 border-divider bg-ground px-3 py-2 text-sm outline-none focus:border-ink"
               id="confirm-password"
               type="password"
               autoComplete="new-password"
@@ -76,13 +75,17 @@ export function PasswordSetupForm({ onSetPassword }: PasswordSetupFormProps) {
             />
           </div>
           {error ? (
-            <p className="text-sm text-destructive" role="alert">
+            <p className="text-sm text-risk" role="alert">
               {error}
             </p>
           ) : null}
-          <Button className="w-full" type="submit" disabled={submitting}>
+          <button
+            className="w-full bg-ink px-4 py-2.5 text-sm font-extrabold text-ground disabled:opacity-50"
+            type="submit"
+            disabled={submitting}
+          >
             {submitting ? "Setting password…" : "Set password"}
-          </Button>
+          </button>
         </form>
       </section>
     </main>

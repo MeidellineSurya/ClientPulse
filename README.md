@@ -20,7 +20,9 @@ invoices) before the client says anything.
 
 ## Stack
 
-- **Frontend:** React (Vite), TypeScript, React Router, Tailwind CSS, shadcn/ui, Recharts
+- **Frontend:** React (Vite), TypeScript, React Router, Tailwind CSS, Recharts, Lucide —
+  custom "Modernist" design system (flat, zero border-radius, ink-on-light-ground with
+  a single red accent), not a component library
 - **Backend:** FastAPI (Python 3.11+), Pydantic
 - **Database:** Supabase (Postgres)
 - **LLM:** Groq (`openai/gpt-oss-120b`)
@@ -42,10 +44,16 @@ clientpulse/
 
 ## Running locally
 
-1. **Database:** create a Supabase project, then run `supabase/schema.sql`
-   followed by `supabase/seed.sql` in its SQL Editor. Create a user under
-   Supabase Authentication, then insert that user's UUID and the seeded agency
-   UUID into `agency_member`. Each user belongs to exactly one agency.
+1. **Database:** create a Supabase project, then run `supabase/schema.sql`,
+   `supabase/seed.sql`, **and every file in `supabase/migrations/`** (in
+   filename order) in its SQL Editor. The migrations aren't optional
+   extras — the backend code already assumes their columns/constraints
+   exist (`signal_snapshot.primary_contact_email`, `alert.revision`) and
+   fails in ways that don't look like a missing migration: new alerts
+   silently fail to insert, and `/score/recompute` reports them under
+   `failed_account_ids` rather than a clear error.
+   Create a user in Supabase Authentication and bind its UUID to the intended
+   agency in `public.agency_member`; never accept an agency ID from the browser.
 2. **Backend:**
    ```
    cd backend
@@ -60,10 +68,31 @@ clientpulse/
    npm install
    npm run dev   # http://localhost:5173
    ```
-4. Sign in through the frontend. Protected API calls require the resulting
-   Supabase access token as `Authorization: Bearer <token>`. Run
-   `POST http://localhost:8000/score/recompute` with that header once to
-   populate `health_score`/`alert` rows before loading the portfolio.
+   Only run this once at a time. Vite silently picks the next free port
+   (5174, 5175, ...) if 5173 is already taken by another `npm run dev`,
+   and the backend's CORS only trusts the origins listed in
+   `CORS_ALLOWED_ORIGINS` — a stray second dev server is the single most
+   common cause of a browser-only "Couldn't load accounts" with a backend
+   that's demonstrably up and returning data to `curl`. Comma-separate
+   multiple origins in `CORS_ALLOWED_ORIGINS` if you want more than one
+   port trusted at once.
+4. Sign in through the frontend, then hit
+   `POST http://localhost:8000/score/recompute` once with the resulting Supabase
+   access token as `Authorization: Bearer <token>` to populate
+   `health_score`/`alert` rows. Otherwise the Portfolio page will show accounts
+   with no score yet.
+5. `/score/recompute` only ever persists the *latest* period's score, even
+   though it computes one for each period in the account's 3-period trend
+   window — so the account-detail chart and accounts-table sparkline will
+   show a flat/duplicate-point line until real time passes and new
+   `signal_snapshot` periods get ingested. To pull the trend that's
+   already latent in the seeded 8-week history into view for a demo, run:
+   ```
+   cd backend && PYTHONPATH=. python scripts/backfill_health_history.py
+   ```
+   It's idempotent (skips any date it's already backfilled) and only
+   persists scores the real scoring engine already computes — nothing
+   fabricated.
 
 `SUPABASE_URL` must be the project's base URL only (e.g.
 `https://xxxx.supabase.co`) — not the REST API path. Pasting the REST
@@ -92,23 +121,34 @@ and falls back rather than crashing.
 - [x] Scoring engine (`/score/recompute[/{account_id}]` — deterministic composite risk,
       revenue-at-risk, per-signal explainability breakdown, alert dedup; merged to
       `main`, run for real against the live project — 15 accounts scored, 3 alerts
-      fired, $418,369.20 total revenue at risk — **stale pending the
-      contact-turnover migration below**, since that reweights the score)
+      fired, $418,369.20 total revenue at risk)
 - [x] Point-of-contact turnover signal (`contact_changed` — a new stakeholder
       taking over an account, derived from `signal_snapshot.primary_contact_email`;
-      see HANDOFF.md §5.1). Requires running
-      `supabase/migrations/20260913_contact_turnover_signal.sql` against any
-      already-provisioned project before `/score/recompute` will pick it up.
+      see HANDOFF.md §5.1). Its migration
+      (`supabase/migrations/20260913_contact_turnover_signal.sql`) was committed
+      but not actually applied to the live project until it was caught by a
+      failing `/score/recompute` call — **now applied and verified**; any other
+      already-provisioned project still needs it run manually (see "Running
+      locally" above).
+- [x] Alert revision/optimistic-concurrency migration
+      (`supabase/migrations/20260913_alert_brief_persistence.sql`) — same story
+      as above: committed but not applied, silently broke every new alert
+      insert and brief update (swallowed as a per-account failure, not a
+      visible error). **Now applied and verified** — a full `/score/recompute`
+      persists all 3 fired alerts with `failed_account_ids: []`.
 - [x] Groq brief provider implemented (`retention_radar/briefs.py` + `groq.py`) —
       wired into `POST /score/recompute`, verified against the live Supabase
       project with real LLM-generated briefs
-- [x] React (Vite) frontend — Portfolio, Account Detail, Alerts, Settings, all
-      wired to the real backend, verified in an actual browser session
+- [x] React (Vite) frontend — redesigned onto a custom flat/Modernist visual
+      system (see `frontend/reference/README.md` for the design brief this
+      followed); Portfolio, Accounts (new — full sortable/searchable book),
+      Account Detail, Alerts, Connections, all wired to the real backend,
+      verified in an actual browser session. Per-account risk-score trend
+      sparklines added to the accounts table, backed by `/accounts/:id/health-history`.
 - [x] Deployment — frontend live on Render, backend live on Vercel (Python
       ASGI serverless), both verified end-to-end in a real browser session
       against the actual production URLs
-- [x] Supabase Auth bearer validation and backend-enforced agency isolation,
-      including tenant-scoped accounts, signals, alerts, ingestion, and scoring
-- [ ] Deploy auth migration, create the production agency membership, and add
-      the frontend's public Supabase Auth environment values
+- [x] Supabase Auth/RLS migration applied and the production StudioCo admin
+      membership bound; bearer-authenticated frontend/backend deployment is
+      pending merge and hosting environment configuration
 - [ ] Demo run-through rehearsed end to end

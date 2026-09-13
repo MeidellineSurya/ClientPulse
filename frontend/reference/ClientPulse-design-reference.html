@@ -1,0 +1,929 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/modernist-3c9d81fa-3b99-4edd-8400-21b02e900fb9/styles.css">
+<script src="_ds/modernist-3c9d81fa-3b99-4edd-8400-21b02e900fb9/_ds_bundle.js"></script>
+<style>
+  a { color: var(--color-accent-700); }
+  a:hover { color: var(--color-accent); }
+  .cp-row:hover { background: color-mix(in srgb, var(--color-text) 5%, transparent); }
+  .cp-nav:hover { background: color-mix(in srgb, var(--color-text) 6%, transparent); }
+  .cp-th { cursor: pointer; user-select: none; white-space: nowrap; }
+  .cp-th:hover { color: var(--color-accent); }
+  .seg { flex-wrap: nowrap; overflow: visible; flex: none; }
+  .cp-scroll { overflow-x: auto; }
+  .cp-scroll table { min-width: 820px; }
+  .seg-opt { white-space: nowrap; }
+  .btn { white-space: nowrap; justify-content: flex-start; }
+  @keyframes cp-pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(.7); } }
+</style>
+</helmet>
+<div style="display:flex; min-height:100vh; background:var(--color-bg); color:var(--color-text); font-family:var(--font-body)">
+
+  <aside style="width:212px; flex:none; border-right:2px solid var(--color-divider); display:flex; flex-direction:column; position:sticky; top:0; height:100vh">
+    <div style="padding:20px 18px 16px; border-bottom:2px solid var(--color-divider)">
+      <div style="display:flex; align-items:center; gap:9px">
+        <svg width="20" height="14" viewBox="0 0 28 14" fill="none" stroke="var(--color-accent)" stroke-width="2.2" stroke-linecap="square" stroke-linejoin="miter"><path d="M1 7h6l3-5 4 10 3-5h10"></path></svg>
+        <div style="font-family:var(--font-heading); font-weight:800; font-size:17px; letter-spacing:-0.03em">ClientPulse</div>
+      </div>
+    </div>
+
+    <nav style="display:flex; flex-direction:column; padding:10px 0; gap:1px">
+      <button class="cp-nav" onClick="{{ goOverview }}" style="display:flex; align-items:center; gap:10px; padding:10px 18px; background:{{ nav.overviewBg }}; border:0; border-left:3px solid {{ nav.overviewBar }}; font-family:var(--font-heading); font-weight:800; font-size:13px; color:{{ nav.overviewFg }}; cursor:pointer; text-align:left">Overview</button>
+      <button class="cp-nav" onClick="{{ goAccounts }}" style="display:flex; align-items:center; gap:10px; padding:10px 18px; background:{{ nav.accountsBg }}; border:0; border-left:3px solid {{ nav.accountsBar }}; font-family:var(--font-heading); font-weight:800; font-size:13px; color:{{ nav.accountsFg }}; cursor:pointer; text-align:left">Accounts</button>
+      <button class="cp-nav" onClick="{{ goAlerts }}" style="display:flex; align-items:center; justify-content:space-between; padding:10px 18px; background:{{ nav.alertsBg }}; border:0; border-left:3px solid {{ nav.alertsBar }}; font-family:var(--font-heading); font-weight:800; font-size:13px; color:{{ nav.alertsFg }}; cursor:pointer; text-align:left">
+        <span>Alerts</span>
+        <span style="background:var(--color-accent); color:var(--color-bg); font-size:10px; padding:1px 6px; font-weight:800">{{ openAlertCount }}</span>
+      </button>
+      <button class="cp-nav" onClick="{{ goConnections }}" style="display:flex; align-items:center; gap:10px; padding:10px 18px; background:{{ nav.connectionsBg }}; border:0; border-left:3px solid {{ nav.connectionsBar }}; font-family:var(--font-heading); font-weight:800; font-size:13px; color:{{ nav.connectionsFg }}; cursor:pointer; text-align:left">Connections</button>
+    </nav>
+
+    <div style="margin-top:auto; border-top:2px solid var(--color-divider); padding:14px 18px">
+      <div style="display:flex; align-items:center; gap:9px">
+        <span style="width:26px; height:26px; flex:none; background:var(--color-text); color:var(--color-bg); font-family:var(--font-heading); font-weight:800; font-size:11px; display:flex; align-items:center; justify-content:center">SC</span>
+        <div style="min-width:0">
+          <div style="font-family:var(--font-heading); font-weight:800; font-size:12.5px">StudioCo</div>
+          <div style="font-size:11px; color:var(--color-neutral-600); white-space:nowrap; overflow:hidden; text-overflow:ellipsis">Dana Whitfield</div>
+        </div>
+      </div>
+      <div style="font-size:10.5px; letter-spacing:0.06em; text-transform:uppercase; color:var(--color-neutral-600); margin-top:10px; display:flex; align-items:center; gap:6px">
+        <span style="width:6px; height:6px; background:var(--color-accent); animation:cp-pulse 2.4s ease-in-out infinite"></span>Signals live · {{ syncedAt }}
+      </div>
+    </div>
+  </aside>
+
+  <main style="flex:1; min-width:0; display:flex; flex-direction:column">
+
+    <sc-if value="{{ isOverview }}" hint-placeholder-val="{{ true }}">
+      <div>
+        <section style="padding:44px 40px 36px; border-bottom:2px solid var(--color-divider)">
+          <div style="font-size:11px; letter-spacing:0.14em; text-transform:uppercase; color:var(--color-accent-700); font-weight:800">Week of {{ weekLabel }}</div>
+          <h1 style="font-size:clamp(30px, 3.6vw, 44px); line-height:1.04; letter-spacing:-0.035em; margin:10px 0 0; max-width:16ch">Your client relationships, before they become a problem.</h1>
+          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(340px,1fr)); gap:32px 40px; align-items:end; margin-top:32px">
+            <div>
+              <div style="font-family:var(--font-heading); font-weight:800; font-size:clamp(52px, 8.5vw, 104px); line-height:0.86; letter-spacing:-0.05em; color:var(--color-accent-700)">{{ atRiskRevenue }}</div>
+              <div style="font-size:17px; font-weight:600; margin-top:14px">monthly revenue currently needs attention</div>
+              <div style="display:flex; gap:20px; margin-top:10px; font-size:13px; color:var(--color-neutral-800)">
+                <span style="font-weight:800; color:var(--color-accent-700)">↑ 18% from last week</span>
+                <span>{{ atRiskCount }} accounts showing worsening signals</span>
+              </div>
+            </div>
+            <div style="border-left:2px solid var(--color-divider); padding-left:28px">
+              <p style="font-size:15px; line-height:1.6; margin:0 0 16px; max-width:44ch">These relationships have drifted away from their own normal pattern for three weeks running. Caught now, there is still time to act before renewal conversations start.</p>
+              <div style="display:flex; gap:10px">
+                <button class="btn btn-primary" onClick="{{ goAlerts }}">Review the action queue</button>
+                <button class="btn btn-secondary" onClick="{{ goAccounts }}">All accounts</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section style="display:grid; grid-template-columns:repeat(auto-fit, minmax(190px,1fr)); border-bottom:2px solid var(--color-divider)">
+          <div style="padding:16px 24px 16px 40px; border-right:1px solid var(--color-divider)">
+            <div style="font-size:10.5px; letter-spacing:0.1em; text-transform:uppercase; color:var(--color-neutral-600)">Annualised exposure</div>
+            <div style="font-family:var(--font-heading); font-weight:800; font-size:26px; letter-spacing:-0.03em; margin-top:4px">{{ annualExposure }}</div>
+          </div>
+          <div style="padding:16px 24px; border-right:1px solid var(--color-divider)">
+            <div style="font-size:10.5px; letter-spacing:0.1em; text-transform:uppercase; color:var(--color-neutral-600)">Healthy revenue</div>
+            <div style="font-family:var(--font-heading); font-weight:800; font-size:26px; letter-spacing:-0.03em; margin-top:4px">{{ healthyRevenue }}</div>
+          </div>
+          <div style="padding:16px 24px; border-right:1px solid var(--color-divider)">
+            <div style="font-size:10.5px; letter-spacing:0.1em; text-transform:uppercase; color:var(--color-neutral-600)">Portfolio health</div>
+            <div style="font-family:var(--font-heading); font-weight:800; font-size:26px; letter-spacing:-0.03em; margin-top:4px">{{ portfolioScore }} <span style="font-size:13px; font-weight:400; color:var(--color-neutral-700)">{{ portfolioDelta }}</span></div>
+          </div>
+          <div style="padding:16px 24px">
+            <div style="font-size:10.5px; letter-spacing:0.1em; text-transform:uppercase; color:var(--color-neutral-600)">Renewals in 90 days</div>
+            <div style="font-family:var(--font-heading); font-weight:800; font-size:26px; letter-spacing:-0.03em; margin-top:4px; color:var(--color-accent-700)">{{ renewalWindowCount }} <span style="font-size:13px; font-weight:400; color:var(--color-neutral-700)">{{ renewalWindowRevenue }}</span></div>
+            <div style="font-size:12px; color:var(--color-neutral-700)">{{ renewalWindowNext }}</div>
+          </div>
+        </section>
+
+        <section style="padding:34px 40px 10px; display:flex; align-items:baseline; justify-content:space-between; gap:16px">
+          <div>
+            <h2 style="font-size:24px; margin:0; letter-spacing:-0.02em">Accounts that need attention</h2>
+            <p style="margin:4px 0 0; font-size:13px; color:var(--color-neutral-700)">Ranked by revenue at stake, not by score alone.</p>
+          </div>
+          <button class="btn btn-ghost" onClick="{{ goAccounts }}">See all 15 →</button>
+        </section>
+        <section style="padding:0 40px 34px" class="cp-scroll">
+          <table class="table">
+            <thead>
+              <tr>
+                <th style="width:30%">Client</th>
+                <th style="text-align:right">Revenue</th>
+                <th style="text-align:right">Health</th>
+                <th>Leading signal</th>
+                <th>3-week trend</th>
+                <th style="text-align:right">Renews</th>
+              </tr>
+            </thead>
+            <tbody>
+              <sc-for list="{{ attention }}" as="r" hint-placeholder-count="5">
+                <tr class="cp-row" onClick="{{ r.open }}" style="cursor:pointer; background:{{ r.rowBg }}">
+                  <td style="padding-block:14px; border-left:3px solid {{ r.mark }}; padding-left:12px">
+                    <div style="font-family:var(--font-heading); font-weight:800; font-size:16px">{{ r.name }}</div>
+                    <div style="font-size:11.5px; color:var(--color-neutral-700)">{{ r.industry }} · {{ r.owner }}</div>
+                  </td>
+                  <td style="padding-block:14px; text-align:right; font-variant-numeric:tabular-nums; font-weight:600">{{ r.mrrText }}</td>
+                  <td style="padding-block:14px; text-align:right">
+                    <span style="font-family:var(--font-heading); font-weight:800; font-size:22px; color:{{ r.fg }}">{{ r.score }}</span>
+                    <div style="font-size:10px; letter-spacing:0.06em; text-transform:uppercase; font-weight:800; color:{{ r.fg }}">{{ r.status }}</div>
+                  </td>
+                  <td style="padding-block:14px; font-size:13px">{{ r.driver }}</td>
+                  <td style="padding-block:14px">
+                    <div style="display:flex; align-items:center; gap:9px; color:{{ r.trendColor }}">
+                      <svg viewBox="0 0 68 20" style="width:68px; height:20px; flex:none"><path d="{{ r.spark }}" fill="none" stroke="currentColor" stroke-width="1.8"></path></svg>
+                      <span style="font-size:12.5px; font-weight:800">{{ r.trendText }}</span>
+                    </div>
+                  </td>
+                  <td style="padding-block:14px; text-align:right; font-variant-numeric:tabular-nums; color:{{ r.renewColor }}; font-weight:{{ r.renewWeight }}">{{ r.renewText }}</td>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+        </section>
+
+        <section style="border-top:2px solid var(--color-divider); display:grid; grid-template-columns:repeat(auto-fit, minmax(330px,1fr))">
+          <div style="padding:28px 40px 34px; border-right:1px solid var(--color-divider)">
+            <h2 style="font-size:17px; margin:0 0 2px">Portfolio health, 12 weeks</h2>
+            <p style="font-size:12.5px; color:var(--color-neutral-700); margin:0 0 14px">Median composite score across all accounts.</p>
+            <svg viewBox="0 0 700 160" preserveAspectRatio="none" style="width:100%; height:160px; display:block; border:1px solid var(--color-divider); background:var(--color-surface)">
+              <line x1="0" y1="53" x2="700" y2="53" stroke="var(--color-neutral-300)" stroke-width="1" vector-effect="non-scaling-stroke"></line>
+              <line x1="0" y1="107" x2="700" y2="107" stroke="var(--color-neutral-300)" stroke-width="1" vector-effect="non-scaling-stroke"></line>
+              <path d="{{ portfolioArea }}" fill="color-mix(in srgb, var(--color-accent) 9%, transparent)"></path>
+              <path d="{{ portfolioPath }}" fill="none" stroke="var(--color-text)" stroke-width="2" vector-effect="non-scaling-stroke"></path>
+            </svg>
+            <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--color-neutral-600); margin-top:6px"><span>{{ firstPeriod }}</span><span>{{ lastPeriod }}</span></div>
+          </div>
+          <div style="padding:28px 40px 34px">
+            <h2 style="font-size:17px; margin:0 0 12px">Latest signals fired</h2>
+            <div style="border-top:2px solid var(--color-divider)">
+              <sc-for list="{{ recentAlerts }}" as="al" hint-placeholder-count="4">
+                <div class="cp-row" onClick="{{ al.open }}" style="cursor:pointer; padding:11px 2px; border-bottom:1px solid var(--color-divider); display:flex; gap:12px; align-items:flex-start">
+                  <span style="width:8px; height:8px; flex:none; margin-top:6px; background:{{ al.mark }}"></span>
+                  <div style="min-width:0">
+                    <div style="font-family:var(--font-heading); font-weight:800; font-size:13.5px">{{ al.account }}</div>
+                    <div style="font-size:12px; color:var(--color-neutral-700); line-height:1.45">{{ al.short }}</div>
+                  </div>
+                  <div style="margin-left:auto; font-size:11px; color:var(--color-neutral-600); white-space:nowrap">{{ al.date }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </section>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isAccounts }}" hint-placeholder-val="{{ false }}">
+      <div>
+        <header style="padding:30px 40px 22px; border-bottom:2px solid var(--color-divider)">
+          <h1 style="font-size:32px; margin:0; letter-spacing:-0.03em">Accounts</h1>
+          <p style="margin:5px 0 0; font-size:13.5px; color:var(--color-neutral-700)">Every account scored against its own eight-week baseline. Click a row to see why.</p>
+        </header>
+        <div style="padding:14px 40px; border-bottom:1px solid var(--color-divider); display:flex; gap:12px; align-items:center; flex-wrap:wrap">
+          <input class="input" style="max-width:250px" placeholder="Search clients or owners" value="{{ query }}" onChange="{{ onQuery }}">
+          <div class="seg">
+            <sc-for list="{{ statusOptions }}" as="s" hint-placeholder-count="4">
+              <label class="seg-opt" style="background:{{ s.bg }}; color:{{ s.fg }}">
+                <input type="radio" name="cpstatus" checked="{{ s.checked }}" onChange="{{ s.pick }}">{{ s.label }}
+              </label>
+            </sc-for>
+          </div>
+          <div style="margin-left:auto; font-size:12.5px; color:var(--color-neutral-700)">{{ rowCountText }}</div>
+        </div>
+        <div style="padding:0 40px 44px" class="cp-scroll">
+          <table class="table">
+            <thead>
+              <tr>
+                <th class="cp-th" onClick="{{ sortByName }}" style="width:26%">Client {{ caret.name }}</th>
+                <th class="cp-th" onClick="{{ sortByMrr }}" style="text-align:right">Revenue {{ caret.mrr }}</th>
+                <th class="cp-th" onClick="{{ sortByScore }}" style="text-align:right">Health {{ caret.score }}</th>
+                <th>Status</th>
+                <th>Leading signal</th>
+                <th class="cp-th" onClick="{{ sortByTrend }}">Trend {{ caret.trend }}</th>
+                <th class="cp-th" onClick="{{ sortByContact }}" style="text-align:right">Last contact {{ caret.contact }}</th>
+                <th class="cp-th" onClick="{{ sortByRenewal }}" style="text-align:right">Renews {{ caret.renewal }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <sc-for list="{{ rows }}" as="r" hint-placeholder-count="9">
+                <tr class="cp-row" onClick="{{ r.open }}" style="cursor:pointer; background:{{ r.rowBg }}">
+                  <td style="padding-block:11px; border-left:3px solid {{ r.mark }}; padding-left:12px">
+                    <div style="font-family:var(--font-heading); font-weight:800; font-size:14px">{{ r.name }}</div>
+                    <div style="font-size:11px; color:var(--color-neutral-600)">{{ r.industry }} · {{ r.owner }}</div>
+                  </td>
+                  <td style="padding-block:11px; text-align:right; font-variant-numeric:tabular-nums">{{ r.mrrText }}</td>
+                  <td style="padding-block:11px; text-align:right; font-family:var(--font-heading); font-weight:800; font-size:17px; color:{{ r.fg }}">{{ r.score }}</td>
+                  <td style="padding-block:11px">
+                    <span style="display:inline-flex; font-size:10.5px; letter-spacing:0.05em; text-transform:uppercase; font-weight:800; padding:3px 8px; color:{{ r.fg }}; background:{{ r.bg }}">{{ r.status }}</span>
+                  </td>
+                  <td style="padding-block:11px; font-size:12.5px; color:var(--color-neutral-800)">{{ r.driver }}</td>
+                  <td style="padding-block:11px">
+                    <div style="display:flex; align-items:center; gap:8px; color:{{ r.trendColor }}">
+                      <svg viewBox="0 0 60 18" style="width:60px; height:18px; flex:none"><path d="{{ r.spark }}" fill="none" stroke="currentColor" stroke-width="1.6"></path></svg>
+                      <span style="font-size:12px; font-weight:800">{{ r.trendText }}</span>
+                    </div>
+                  </td>
+                  <td style="padding-block:11px; text-align:right; font-variant-numeric:tabular-nums; color:{{ r.contactColor }}">{{ r.contactText }}</td>
+                  <td style="padding-block:11px; text-align:right; font-variant-numeric:tabular-nums; color:{{ r.renewColor }}; font-weight:{{ r.renewWeight }}">{{ r.renewText }}</td>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+          <sc-if value="{{ noRows }}" hint-placeholder-val="{{ false }}">
+            <div style="border:1px dashed var(--color-divider); padding:44px; text-align:center">
+              <div style="font-family:var(--font-heading); font-weight:800; font-size:16px">No clients match</div>
+              <div style="font-size:13px; color:var(--color-neutral-700); margin-top:4px">Clear the search or switch the status filter.</div>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isDetail }}" hint-placeholder-val="{{ false }}">
+      <div>
+        <div style="padding:12px 40px; border-bottom:1px solid var(--color-divider); display:flex; align-items:center; gap:10px">
+          <button class="btn btn-ghost" onClick="{{ goBack }}">← Back</button>
+          <span style="font-size:12px; color:var(--color-neutral-600)">Accounts / {{ sel.name }}</span>
+        </div>
+        <header style="padding:32px 40px 28px; border-bottom:2px solid var(--color-divider)">
+          <div style="display:flex; gap:40px; align-items:flex-start; flex-wrap:wrap">
+            <div style="min-width:280px; flex:1">
+              <h1 style="font-size:40px; margin:0; letter-spacing:-0.035em">{{ sel.name }}</h1>
+              <div style="font-size:13.5px; color:var(--color-neutral-700); margin-top:5px">{{ sel.industry }} · client since {{ sel.since }} · {{ sel.owner }} · {{ sel.contactEmail }}</div>
+              <p style="font-size:19px; line-height:1.42; font-weight:600; max-width:40ch; margin:18px 0 0">{{ sel.verdict }}</p>
+            </div>
+            <div style="display:flex; gap:0; align-items:stretch">
+              <div style="border-left:4px solid {{ sel.mark }}; padding:0 28px 0 16px">
+                <div style="font-size:10.5px; letter-spacing:0.1em; text-transform:uppercase; color:var(--color-neutral-600)">Health score</div>
+                <div style="font-family:var(--font-heading); font-weight:800; font-size:68px; line-height:0.92; letter-spacing:-0.05em; color:{{ sel.fg }}">{{ sel.score }}</div>
+                <div style="font-size:12.5px; font-weight:800; letter-spacing:0.06em; text-transform:uppercase; color:{{ sel.fg }}">{{ sel.status }}</div>
+                <div style="font-size:12px; color:var(--color-neutral-700); margin-top:4px">{{ sel.trendSentence }}</div>
+              </div>
+              <div style="border-left:1px solid var(--color-divider); padding-left:28px">
+                <div style="font-size:10.5px; letter-spacing:0.1em; text-transform:uppercase; color:var(--color-neutral-600)">Revenue exposed</div>
+                <div style="font-family:var(--font-heading); font-weight:800; font-size:38px; line-height:1.05; letter-spacing:-0.04em; margin-top:4px">{{ sel.mrrText }}<span style="font-size:16px; font-weight:400"> / mo</span></div>
+                <div style="font-size:13px; color:var(--color-neutral-800); margin-top:2px">{{ sel.annualText }} annualised</div>
+                <div style="font-size:12px; color:var(--color-neutral-700); margin-top:6px">Last contact {{ sel.contactText }}</div>
+                <div style="margin-top:10px; border-top:1px solid var(--color-divider); padding-top:8px">
+                  <div style="font-size:10.5px; letter-spacing:0.1em; text-transform:uppercase; color:var(--color-neutral-600)">Contract renews</div>
+                  <div style="font-family:var(--font-heading); font-weight:800; font-size:17px; color:{{ sel.renewalColor }}">{{ sel.renewalText }} · {{ sel.renewalDays }}</div>
+                  <div style="font-size:11.5px; color:var(--color-neutral-700); max-width:26ch">{{ sel.renewalNote }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <section style="display:grid; grid-template-columns:repeat(auto-fit, minmax(340px,1fr)); border-bottom:2px solid var(--color-divider)">
+          <div style="padding:26px 32px 30px 40px; border-right:1px solid var(--color-divider)">
+            <h2 style="font-size:17px; margin:0 0 2px">Relationship health, 12 weeks</h2>
+            <p style="font-size:12.5px; color:var(--color-neutral-700); margin:0 0 14px">Dashed line is the alert threshold ({{ threshold }}). The red segment is the last three weeks.</p>
+            <svg viewBox="0 0 700 220" preserveAspectRatio="none" style="width:100%; height:230px; display:block; border:1px solid var(--color-divider); background:var(--color-surface)">
+              <line x1="0" y1="{{ sel.thresholdY }}" x2="700" y2="{{ sel.thresholdY }}" stroke="var(--color-accent)" stroke-width="1.5" stroke-dasharray="7 6" vector-effect="non-scaling-stroke"></line>
+              <path d="{{ sel.scoreArea }}" fill="color-mix(in srgb, var(--color-text) 8%, transparent)"></path>
+              <path d="{{ sel.scorePath }}" fill="none" stroke="var(--color-text)" stroke-width="2.4" vector-effect="non-scaling-stroke"></path>
+              <path d="{{ sel.scoreRecent }}" fill="none" stroke="{{ sel.mark }}" stroke-width="3.2" vector-effect="non-scaling-stroke"></path>
+              <circle cx="697" cy="{{ sel.lastY }}" r="4.5" fill="{{ sel.mark }}"></circle>
+            </svg>
+            <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--color-neutral-600); margin-top:6px"><span>{{ firstPeriod }}</span><span>{{ lastPeriod }}</span></div>
+          </div>
+          <div style="padding:26px 40px 30px 32px; background:var(--color-surface)">
+            <div style="font-size:10.5px; letter-spacing:0.1em; text-transform:uppercase; color:var(--color-accent-700); font-weight:800">What's happening</div>
+            <p style="font-size:15px; line-height:1.62; margin:8px 0 18px">{{ sel.brief }}</p>
+            <div style="border-top:2px solid var(--color-divider); padding-top:14px">
+              <div style="font-size:10.5px; letter-spacing:0.1em; text-transform:uppercase; color:var(--color-neutral-600)">Recommended action</div>
+              <div style="font-family:var(--font-heading); font-weight:800; font-size:19px; line-height:1.25; margin:6px 0 6px">{{ sel.action }}</div>
+              <p style="font-size:13.5px; line-height:1.55; margin:0 0 14px; color:var(--color-neutral-800)">{{ sel.actionWhy }}</p>
+              <div style="display:flex; gap:10px">
+                <button class="btn btn-primary">Log outreach</button>
+                <button class="btn btn-secondary" onClick="{{ goAlerts }}">Open in queue</button>
+              </div>
+            </div>
+            <div style="font-size:11px; color:var(--color-neutral-600); margin-top:16px; border-top:1px solid var(--color-divider); padding-top:10px">Written from the signals below. The score itself is deterministic — the model never sets it.</div>
+          </div>
+        </section>
+
+        <section style="padding:26px 40px 12px; display:flex; align-items:baseline; justify-content:space-between; gap:16px; flex-wrap:wrap">
+          <div>
+            <h2 style="font-size:17px; margin:0">Normal behaviour → recent behaviour</h2>
+            <p style="font-size:12.5px; color:var(--color-neutral-700); margin:3px 0 0">Grey band is this client's own baseline ±1σ over weeks 1–8. The coloured line is the last three weeks.</p>
+          </div>
+        </section>
+        <section style="padding:0 40px 28px; display:grid; grid-template-columns:repeat(auto-fit, minmax(250px,1fr))">
+          <sc-for list="{{ sel.charts }}" as="c" hint-placeholder-count="4">
+            <div style="border:1px solid var(--color-divider); padding:16px 18px; margin:0 -0.5px -0.5px 0">
+              <div style="font-size:10.5px; letter-spacing:0.1em; text-transform:uppercase; color:var(--color-neutral-600)">{{ c.label }}</div>
+              <div style="font-family:var(--font-heading); font-weight:800; font-size:26px; letter-spacing:-0.03em; color:{{ c.deltaColor }}; margin-top:4px">{{ c.delta }}</div>
+              <div style="font-size:12px; color:var(--color-neutral-700); margin-bottom:10px">{{ c.baselineText }} → {{ c.currentText }}</div>
+              <svg viewBox="0 0 320 80" preserveAspectRatio="none" style="width:100%; height:80px; display:block">
+                <rect x="0" y="{{ c.bandY }}" width="320" height="{{ c.bandH }}" fill="var(--color-neutral-300)" opacity="0.6"></rect>
+                <line x1="0" y1="{{ c.avgY }}" x2="320" y2="{{ c.avgY }}" stroke="var(--color-neutral-600)" stroke-width="1" stroke-dasharray="4 4" vector-effect="non-scaling-stroke"></line>
+                <path d="{{ c.path }}" fill="none" stroke="var(--color-text)" stroke-width="1.7" vector-effect="non-scaling-stroke"></path>
+                <path d="{{ c.recentPath }}" fill="none" stroke="{{ c.deltaColor }}" stroke-width="2.6" vector-effect="non-scaling-stroke"></path>
+                <circle cx="317" cy="{{ c.lastY }}" r="3.5" fill="{{ c.deltaColor }}"></circle>
+              </svg>
+              <div style="font-size:11px; color:var(--color-neutral-700); margin-top:8px">Weight {{ c.weight }} · drift {{ c.driftText }}σ</div>
+            </div>
+          </sc-for>
+        </section>
+
+        <sc-if value="{{ showMath }}" hint-placeholder-val="{{ true }}">
+          <section style="padding:0 40px 28px">
+            <div style="border:1px solid var(--color-divider); padding:18px 20px">
+              <div style="font-size:10.5px; letter-spacing:0.1em; text-transform:uppercase; color:var(--color-neutral-600); margin-bottom:10px">How this score was calculated</div>
+              <div style="font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:12.5px; line-height:1.95">
+                <sc-for list="{{ sel.mathRows }}" as="m" hint-placeholder-count="4">
+                  <div style="display:flex; gap:12px; flex-wrap:wrap"><span style="width:240px">{{ m.term }}</span><span style="width:140px">{{ m.calc }}</span><span style="font-weight:800">{{ m.value }}</span></div>
+                </sc-for>
+                <div style="display:flex; gap:12px; border-top:2px solid var(--color-divider); margin-top:8px; padding-top:8px"><span style="width:240px">composite_risk</span><span style="width:140px">sum</span><span style="font-weight:800">{{ sel.compositeText }}</span></div>
+                <div style="display:flex; gap:12px"><span style="width:240px">health = 100 − 100 × risk</span><span style="width:140px"></span><span style="font-weight:800; color:{{ sel.fg }}">{{ sel.score }}</span></div>
+              </div>
+            </div>
+          </section>
+        </sc-if>
+
+        <section style="padding:0 40px 48px">
+          <h2 style="font-size:17px; margin:0 0 10px">Recent activity</h2>
+          <div style="border-top:2px solid var(--color-divider)">
+            <sc-for list="{{ sel.activity }}" as="ev" hint-placeholder-count="5">
+              <div style="display:flex; gap:18px; padding:12px 0; border-bottom:1px solid var(--color-divider)">
+                <div style="width:86px; flex:none; font-size:12px; color:var(--color-neutral-600); font-variant-numeric:tabular-nums">{{ ev.date }}</div>
+                <span style="width:8px; height:8px; flex:none; margin-top:6px; background:{{ ev.color }}"></span>
+                <div style="font-size:13.5px; line-height:1.5">{{ ev.text }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </section>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isAlerts }}" hint-placeholder-val="{{ false }}">
+      <div>
+        <header style="padding:32px 40px 24px; border-bottom:2px solid var(--color-divider)">
+          <h1 style="font-size:34px; margin:0; letter-spacing:-0.03em; max-width:20ch">Catch problems while there's still time.</h1>
+          <p style="margin:8px 0 0; font-size:13.5px; color:var(--color-neutral-700); max-width:66ch">An alert fires only when composite risk crosses the threshold <em>and</em> the trend has worsened three periods running — so this queue stays short enough to work through each morning.</p>
+        </header>
+        <div style="padding:14px 40px; border-bottom:1px solid var(--color-divider); display:flex; gap:12px; align-items:center; flex-wrap:wrap">
+          <div class="seg">
+            <sc-for list="{{ alertFilters }}" as="s" hint-placeholder-count="4">
+              <label class="seg-opt" style="background:{{ s.bg }}; color:{{ s.fg }}">
+                <input type="radio" name="cpalert" checked="{{ s.checked }}" onChange="{{ s.pick }}">{{ s.label }}
+              </label>
+            </sc-for>
+          </div>
+          <div style="margin-left:auto; font-size:12.5px; color:var(--color-neutral-700)">{{ alertCountText }}</div>
+        </div>
+        <div style="padding:22px 40px 48px; display:flex; flex-direction:column; gap:16px">
+          <sc-for list="{{ alerts }}" as="al" hint-placeholder-count="4">
+            <article style="border:1px solid var(--color-divider); border-left:5px solid {{ al.mark }}; background:{{ al.bg }}">
+              <div style="display:flex; gap:18px; align-items:flex-start; padding:16px 20px; border-bottom:1px solid var(--color-divider); flex-wrap:wrap">
+                <div>
+                  <div style="display:flex; align-items:center; gap:10px">
+                    <button onClick="{{ al.open }}" style="background:none; border:0; padding:0; cursor:pointer; font-family:var(--font-heading); font-weight:800; font-size:20px; letter-spacing:-0.02em; color:var(--color-text)">{{ al.account }}</button>
+                    <span style="font-size:10.5px; letter-spacing:0.05em; text-transform:uppercase; font-weight:800; padding:3px 8px; color:{{ al.fg }}; background:{{ al.chipBg }}">{{ al.severity }}</span>
+                  </div>
+                  <div style="font-size:12px; color:var(--color-neutral-700); margin-top:3px">Triggered {{ al.date }} · {{ al.owner }}</div>
+                </div>
+                <div style="display:flex; align-items:center; gap:26px; margin-left:auto">
+                  <div>
+                    <div style="font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--color-neutral-600)">Impact</div>
+                    <div style="font-family:var(--font-heading); font-weight:800; font-size:21px; letter-spacing:-0.02em">{{ al.mrrText }}<span style="font-size:12px; font-weight:400">/mo</span></div>
+                  </div>
+                  <div>
+                    <div style="font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--color-neutral-600)">Health</div>
+                    <div style="font-family:var(--font-heading); font-weight:800; font-size:21px; color:{{ al.fg }}">{{ al.score }}</div>
+                  </div>
+                  <div>
+                    <div style="font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--color-neutral-600)">Renews</div>
+                    <div style="font-family:var(--font-heading); font-weight:800; font-size:21px; letter-spacing:-0.02em; color:{{ al.renewColor }}">{{ al.renewText }}</div>
+                    <div style="font-size:11px; color:var(--color-neutral-700)">in {{ al.renewDays }}</div>
+                  </div>
+                  <div class="seg">
+                    <sc-for list="{{ al.statuses }}" as="st" hint-placeholder-count="3">
+                      <label class="seg-opt" style="background:{{ st.bg }}; color:{{ st.fg }}">
+                        <input type="radio" name="{{ al.radioName }}" checked="{{ st.checked }}" onChange="{{ st.pick }}">{{ st.label }}
+                      </label>
+                    </sc-for>
+                  </div>
+                </div>
+              </div>
+              <div style="padding:16px 20px; display:grid; grid-template-columns:repeat(auto-fit, minmax(230px,1fr)); gap:26px">
+                <div>
+                  <div style="font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--color-neutral-600); margin-bottom:7px">Why</div>
+                  <div style="display:flex; flex-direction:column; gap:6px">
+                    <sc-for list="{{ al.signals }}" as="sg" hint-placeholder-count="2">
+                      <div style="display:flex; justify-content:space-between; gap:10px; font-size:12.5px; border-bottom:1px dotted var(--color-divider); padding-bottom:4px">
+                        <span>{{ sg.name }}</span><span style="font-weight:800; color:{{ al.fg }}">{{ sg.value }}</span>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+                <div>
+                  <p style="font-size:14px; line-height:1.6; margin:0 0 12px">{{ al.brief }}</p>
+                  <div style="border-left:3px solid var(--color-text); padding-left:14px">
+                    <div style="font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--color-neutral-600)">Recommended</div>
+                    <div style="font-family:var(--font-heading); font-weight:800; font-size:15px; line-height:1.4">{{ al.action }}</div>
+                  </div>
+                </div>
+              </div>
+            </article>
+          </sc-for>
+          <sc-if value="{{ noAlerts }}" hint-placeholder-val="{{ false }}">
+            <div style="border:1px dashed var(--color-divider); padding:52px; text-align:center">
+              <div style="font-family:var(--font-heading); font-weight:800; font-size:17px">Queue clear</div>
+              <div style="font-size:13px; color:var(--color-neutral-700); margin-top:4px">Nothing in this filter needs your attention right now.</div>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isConnections }}" hint-placeholder-val="{{ false }}">
+      <div>
+        <header style="padding:32px 40px 24px; border-bottom:2px solid var(--color-divider)">
+          <h1 style="font-size:32px; margin:0; letter-spacing:-0.03em">Connections</h1>
+          <p style="margin:6px 0 0; font-size:13.5px; color:var(--color-neutral-700); max-width:64ch">ClientPulse reads metadata only — timestamps, attendee counts and invoice dates. Message content is never read or stored.</p>
+        </header>
+        <div style="padding:26px 40px 48px; max-width:780px">
+          <sc-for list="{{ connections }}" as="cn" hint-placeholder-count="3">
+            <div style="border:1px solid var(--color-divider); margin-bottom:-1px; padding:18px 20px; display:flex; gap:18px; align-items:center; flex-wrap:wrap">
+              <div style="flex:1; min-width:220px">
+                <div style="display:flex; align-items:center; gap:10px">
+                  <div style="font-family:var(--font-heading); font-weight:800; font-size:16px">{{ cn.name }}</div>
+                  <span style="font-size:10.5px; letter-spacing:0.05em; text-transform:uppercase; font-weight:800; padding:2px 8px; color:{{ cn.fg }}; background:{{ cn.bg }}">{{ cn.state }}</span>
+                </div>
+                <div style="font-size:12.5px; color:var(--color-neutral-700); margin-top:4px">{{ cn.detail }}</div>
+              </div>
+              <button class="btn {{ cn.btnClass }}" onClick="{{ cn.toggle }}">{{ cn.cta }}</button>
+            </div>
+          </sc-for>
+          <div style="border:1px dashed var(--color-divider); margin-top:24px; padding:26px; text-align:center">
+            <div style="font-family:var(--font-heading); font-weight:800; font-size:15px">Invoice history (CSV)</div>
+            <div style="font-size:12.5px; color:var(--color-neutral-700); margin:6px 0 14px">{{ csvState }}</div>
+            <button class="btn btn-secondary" onClick="{{ uploadCsv }}">{{ csvCta }}</button>
+          </div>
+          <div style="margin-top:28px; border-top:2px solid var(--color-divider); padding-top:18px; font-size:12.5px; color:var(--color-neutral-700); line-height:1.6">
+            Baselines need roughly eight weeks of history before scores become meaningful. This workspace is running on seeded StudioCo history for demonstration.
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+  </main>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;palette&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Signal red&quot;,&quot;Deep teal&quot;,&quot;Graphite&quot;,&quot;Ink violet&quot;],&quot;default&quot;:&quot;Signal red&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;showMath&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;}}">
+const PAL = {
+  risk:    { fg: '#9c2a12', mark: '#d8452a', bg: '#f7ded7', row: 'rgba(216,69,42,0.05)' },
+  watch:   { fg: '#8a5504', mark: '#c07d10', bg: '#f5e8cf', row: 'rgba(192,125,16,0.05)' },
+  healthy: { fg: '#2c6445', mark: '#4c8f68', bg: '#e3ece6', row: 'transparent' }
+};
+const THEMES = {
+  'Signal red': { a: '#ec3013', a600: '#dd2b0f', a700: '#ae1800', a100: '#fff2ef', a200: '#ffe0d9' },
+  'Deep teal': { a: '#0f7a6d', a600: '#0b6257', a700: '#084b44', a100: '#e8f4f2', a200: '#c9e4df' },
+  'Graphite': { a: '#3d3a39', a600: '#2d2b2b', a700: '#201e1d', a100: '#efeceb', a200: '#dcd8d7' },
+  'Ink violet': { a: '#5b3fd6', a600: '#4a32b4', a700: '#3a2790', a100: '#efecfd', a200: '#dcd5f7' }
+};
+const TODAY = new Date('2026-09-15T00:00:00');
+const SEED = [
+  ['Northstar Health','Healthcare','Dana Whitfield',18000,58,'Response time ↑ 2.4×',11,'Mar 2023','ops@northstarhealth.com','2026-10-31'],
+  ['Atlas Consulting','Professional services','Rafi Osei',13500,64,'Meetings ↓ 28%',9,'Jan 2024','k.bright@atlasconsulting.co','2026-12-01'],
+  ['Silvercrest Property','Property','Dana Whitfield',10500,61,'Cancellations ↑ 40%',14,'Sep 2022','marketing@silvercrest.com','2026-09-30'],
+  ['Kestrel Group','Financial services','Rafi Osei',10500,68,'Payment lag +6 days',8,'Jun 2023','ops@kestrelgroup.com','2027-01-15'],
+  ['Vantage Labs','B2B SaaS','Priya Nandan',11000,72,'Response time ↑ 1.6×',6,'Feb 2024','growth@vantagelabs.io','2026-11-30'],
+  ['Harbour & Finch','Legal','Priya Nandan',9500,74,'Meetings ↓ 12%',7,'Nov 2022','comms@harbourfinch.com','2026-10-15'],
+  ['Ridgeline Sports','Sports & leisure','Rafi Osei',6500,78,'Slower replies',5,'Apr 2024','team@ridgelinesports.com','2027-04-01'],
+  ['Fairweather Foods','FMCG','Priya Nandan',8800,81,'Stable',5,'Aug 2023','brand@fairweatherfoods.com','2027-02-01'],
+  ['Orbit Payments','Fintech','Dana Whitfield',13500,84,'Stable',4,'Oct 2023','marketing@orbitpay.com','2026-10-01'],
+  ['Greenline Co','Sustainability','Priya Nandan',7500,85,'Stable',4,'Jul 2023','hello@greenline.co','2027-07-01'],
+  ['Marlow & Reed','Real estate','Rafi Osei',5000,86,'Stable',3,'May 2024','studio@marlowreed.com','2027-05-01'],
+  ['Acme Media','Retail','Dana Whitfield',14000,88,'Engagement rising',2,'Feb 2022','press@acmemedia.com','2027-02-28'],
+  ['Pinnacle Dental','Healthcare','Priya Nandan',3800,89,'Stable',3,'Dec 2023','front@pinnacledental.com','2026-12-15'],
+  ['Studio Eleven','Hospitality','Rafi Osei',6000,91,'Engagement rising',2,'Mar 2024','ben@studioeleven.com','2027-03-01'],
+  ['Cobalt Interiors','Design','Dana Whitfield',4500,93,'Engagement rising',1,'Jan 2023','studio@cobaltinteriors.com','2027-01-01']
+];
+const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function renewalInfo(iso) {
+  const d = new Date(iso + 'T00:00:00');
+  const days = Math.round((d - TODAY) / 86400000);
+  return { days, text: d.getDate() + ' ' + MON[d.getMonth()] + ' ' + d.getFullYear(), shortText: d.getDate() + ' ' + MON[d.getMonth()] };
+}
+const COPY = {
+  'Northstar Health': {
+    verdict: "Northstar's relationship health has declined sharply over the last three weeks.",
+    brief: "Northstar's email response times have stretched from a typical 4.1 hours to just under ten, while their cancellation rate has climbed about 40% above baseline. Both signals moved together, which historically indicates the relationship has lost its internal sponsor rather than simply hitting a busy month.",
+    action: 'Schedule a strategic check-in this week.',
+    actionWhy: 'Use the conversation to understand whether priorities, expectations or delivery quality have changed — and confirm who now owns the relationship on their side.'
+  },
+  'Atlas Consulting': {
+    verdict: 'Atlas has quietly reduced contact for six consecutive weeks, with meetings down nearly a third.',
+    brief: 'Meeting frequency at Atlas is down by almost a third against their own baseline and the two most recent monthly reviews were rescheduled rather than held. Response times remain acceptable, so this reads as reduced engagement rather than dissatisfaction — the same pattern that preceded two of last year\u2019s non-renewals.',
+    action: 'Re-establish the monthly review cadence.',
+    actionWhy: 'Propose a fixed recurring slot and bring one piece of forward-looking strategic work; the gap here is guidance, not delivery.'
+  },
+  'Silvercrest Property': {
+    verdict: 'Silvercrest is cancelling sessions at twice their usual rate and has gone quiet for two weeks.',
+    brief: 'Silvercrest is now cancelling sessions at roughly twice their usual rate, and invoices have started slipping past terms — an unusual combination for an account that paid on time for eleven straight months. There has been no contact at all in the last fourteen days.',
+    action: 'Escalate to the agency owner and call, do not email.',
+    actionWhy: 'Payment drift alongside disengagement usually signals a budget review upstream. A direct conversation this week is worth more than another status report.'
+  },
+  'Kestrel Group': {
+    verdict: 'Kestrel is paying later and meeting less than their own norm.',
+    brief: 'Invoices are running close to six days later than Kestrel\u2019s eleven-month average and one of the last three sessions was cancelled. Response times are unchanged, so the relationship itself looks intact — the drift is procedural.',
+    action: 'Confirm the invoicing contact is still correct.',
+    actionWhy: 'A finance-side personnel change explains this pattern more often than dissatisfaction does; verify before escalating.'
+  },
+  'Vantage Labs': {
+    verdict: 'Vantage is slower to reply than usual, but engagement holds.',
+    brief: 'Replies from Vantage now take close to twice as long as their 4.1-hour baseline, with meeting cadence unchanged. One signal drifting on its own rarely predicts churn — worth watching, not acting on yet.',
+    action: 'Keep on watch; no outreach needed this week.',
+    actionWhy: 'Revisit if a second signal starts drifting or the trend continues for another two periods.'
+  }
+};
+const SIGDEF = [
+  { key: 'response', label: 'Response time', weight: '0.35', p: 1.15 },
+  { key: 'cancel', label: 'Meeting cancellations', weight: '0.30', p: 1.00 },
+  { key: 'pay', label: 'Payment lag', weight: '0.20', p: 0.75 },
+  { key: 'freq', label: 'Meeting frequency', weight: '0.15', p: 0.90 }
+];
+const PERIODS = ['Jun 30','Jul 7','Jul 14','Jul 21','Jul 28','Aug 4','Aug 11','Aug 18','Aug 25','Sep 1','Sep 8','Sep 15'];
+
+function rng(seed) { let r = (seed * 9301 + 49297) % 233280; return () => { r = (r * 9301 + 49297) % 233280; return r / 233280 - 0.5; }; }
+function series(end, drop, seed, jitter) {
+  const rnd = rng(seed), start = end + drop, out = [];
+  for (let i = 0; i < 12; i++) {
+    const t = i < 9 ? (i / 9) * 0.28 : 0.28 + ((i - 8) / 3) * 0.72;
+    out.push(start - drop * t + rnd() * jitter);
+  }
+  out[11] = end;
+  return out;
+}
+function extent(vals, extra) {
+  const all = vals.concat(extra || []);
+  let min = Math.min.apply(null, all), max = Math.max.apply(null, all);
+  const pad = (max - min) * 0.18 || 1;
+  return [min - pad, max + pad];
+}
+function yOf(v, min, max, h, pad) { return (pad + (1 - (v - min) / ((max - min) || 1)) * (h - pad * 2)); }
+function line(vals, w, h, pad, min, max, from) {
+  const start = from || 0;
+  let d = '';
+  for (let i = start; i < vals.length; i++) {
+    const x = (i / (vals.length - 1)) * w;
+    d += (i === start ? 'M' : 'L') + x.toFixed(1) + ' ' + yOf(vals[i], min, max, h, pad).toFixed(1) + ' ';
+  }
+  return d.trim();
+}
+function money(n) { return '$' + n.toLocaleString('en-US'); }
+function shortMoney(n) { return '$' + (n >= 1000 ? (Math.round(n / 100) / 10) + 'K' : n); }
+function r1(n) { return Math.round(n * 10) / 10; }
+
+function buildAccounts() {
+  return SEED.map((s, idx) => {
+    const [name, industry, owner, mrr, score, driver, days, since, contactEmail, renewalISO] = s;
+    const renewal = renewalInfo(renewalISO);
+    const statusKey = score >= 80 ? 'healthy' : score >= 70 ? 'watch' : 'risk';
+    const status = statusKey === 'healthy' ? 'Healthy' : statusKey === 'watch' ? 'Watch' : 'At risk';
+    const total = (100 - score) / 100;
+    const lead = /Response/i.test(driver) ? 'response' : /Cancel/i.test(driver) ? 'cancel'
+      : /Payment/i.test(driver) ? 'pay' : /Meetings/i.test(driver) ? 'freq' : 'response';
+    const pat = {};
+    SIGDEF.forEach(d => { pat[d.key] = d.p * (d.key === lead ? 1.7 : 0.72); });
+    const norm = SIGDEF.reduce((a, d) => a + parseFloat(d.weight) * pat[d.key], 0);
+    const k = total / norm;
+    const drifts = {};
+    SIGDEF.forEach(d => { drifts[d.key] = Math.min(1, Math.max(0, pat[d.key] * k)); });
+    const scoreDelta = statusKey === 'risk' ? -(14 + (idx % 3) * 3) : statusKey === 'watch' ? -(4 + idx % 3) : (idx % 4);
+    const scores = series(score, -scoreDelta, idx + 3, 1.6).map(v => Math.max(35, Math.min(99, v)));
+    const values = {
+      response: { cur: 4.1 * (1 + 1.9 * drifts.response), base: 4.1, fmt: v => r1(v) + 'h', jitter: 0.5, inv: false },
+      cancel: { cur: 9 * (1 + 1.5 * drifts.cancel), base: 9, fmt: v => r1(v) + '%', jitter: 1.0, inv: false },
+      pay: { cur: 1.8 + 12 * drifts.pay, base: 1.8, fmt: v => r1(v) + ' days', jitter: 0.6, inv: false },
+      freq: { cur: 4.2 * (1 - 0.45 * drifts.freq), base: 4.2, fmt: v => r1(v) + ' / mo', jitter: 0.3, inv: true }
+    };
+    const label = {};
+    SIGDEF.forEach(d => {
+      const v = values[d.key], pct = Math.round((v.cur / v.base - 1) * 100);
+      if (d.key === 'response') label.response = r1(v.cur / v.base) + '×';
+      else if (d.key === 'pay') label.pay = '+' + r1(v.cur - v.base) + 'd';
+      else if (d.key === 'cancel') label.cancel = '+' + pct + '%';
+      else label.freq = '−' + Math.abs(pct) + '%';
+    });
+    const driverText = statusKey === 'healthy'
+      ? (score >= 88 ? 'Engagement rising' : 'Stable')
+      : lead === 'response' ? 'Response time ' + label.response + ' slower'
+      : lead === 'cancel' ? 'Cancellations ' + label.cancel
+      : lead === 'pay' ? 'Payment lag ' + label.pay
+      : 'Meetings ' + label.freq;
+    const charts = SIGDEF.map((d, j) => {
+      const v = values[d.key], sd = v.base * 0.16;
+      const vals = series(v.cur, v.base - v.cur, idx * 7 + j, v.jitter);
+      const [min, max] = extent(vals, [v.base - sd, v.base + sd]);
+      const H = 80, P = 8;
+      const worse = v.inv ? v.cur < v.base - sd : v.cur > v.base + sd;
+      const pct = Math.round((v.cur / v.base - 1) * 100);
+      let delta = d.key === 'response' ? label.response + ' slower'
+        : d.key === 'pay' ? label.pay.replace('d', ' days')
+        : d.key === 'cancel' ? label.cancel : label.freq;
+      if (!worse && Math.abs(pct) < 8) delta = 'within baseline';
+      return {
+        key: d.key, worse, label: d.label, weight: d.weight, delta,
+        deltaColor: worse ? (statusKey === 'risk' ? PAL.risk.mark : PAL.watch.mark) : PAL.healthy.mark,
+        baselineText: 'normally ' + v.fmt(v.base),
+        currentText: 'now ' + v.fmt(v.cur),
+        driftText: r1(drifts[d.key] * 2.4),
+        bandY: yOf(v.base + sd, min, max, H, P).toFixed(1),
+        bandH: Math.abs(yOf(v.base - sd, min, max, H, P) - yOf(v.base + sd, min, max, H, P)).toFixed(1),
+        avgY: yOf(v.base, min, max, H, P).toFixed(1),
+        path: line(vals, 320, H, P, min, max),
+        recentPath: line(vals, 320, H, P, min, max, 8),
+        lastY: yOf(vals[11], min, max, H, P).toFixed(1)
+      };
+    });
+    const mathRows = SIGDEF.map(d => ({
+      term: d.weight + ' × drift(' + d.key + ')',
+      calc: d.weight + ' × ' + drifts[d.key].toFixed(2),
+      value: (parseFloat(d.weight) * drifts[d.key]).toFixed(3)
+    }));
+    const c = COPY[name] || {
+      verdict: name + ' is behaving in line with their own baseline.',
+      brief: 'No signal at ' + name + ' has moved more than one standard deviation from its eight-week baseline. Response times, meeting cadence and payment timing are all within their normal range.',
+      action: 'No action needed.',
+      actionWhy: 'Keep the current cadence; ClientPulse will flag the account if two or more signals start drifting together.'
+    };
+    const [smin, smax] = [35, 100];
+    return {
+      id: idx, name, industry, owner, mrr, score, status, statusKey, driver: driverText, labels: label, days, since, contactEmail, renewal,
+      scoreDelta, drifts, charts, mathRows,
+      composite: total,
+      verdict: c.verdict, brief: c.brief, action: c.action, actionWhy: c.actionWhy,
+      scores, smin, smax
+    };
+  });
+}
+
+const ACTIVITY = {
+  'Northstar Health': [
+    ['Sep 15', 'Alert fired — composite risk 0.42, third consecutive worsening period.', 'risk'],
+    ['Sep 11', 'Monthly strategy session cancelled by client, 3 hours before start.', 'risk'],
+    ['Sep 8', 'Reply to campaign brief took 9.7 hours (baseline 4.1h).', 'watch'],
+    ['Sep 2', 'Invoice #4192 paid 4 days late.', 'watch'],
+    ['Aug 26', 'Quarterly review held — no issues raised.', 'healthy']
+  ]
+};
+const DEFAULT_ACTIVITY = [
+  ['Sep 14', 'Weekly signal sync completed — all signals within baseline.', 'healthy'],
+  ['Sep 9', 'Status call held as scheduled.', 'healthy'],
+  ['Sep 3', 'Invoice paid on terms.', 'healthy'],
+  ['Aug 27', 'Campaign review held, positive feedback logged.', 'healthy']
+];
+
+class Component extends DCLogic {
+  state = {
+    view: 'overview', selId: 0, query: '', sort: 'risk', dir: 1,
+    statusFilter: 'All', alertFilter: 'All',
+    alertStatus: {}, conns: { gmail: true, cal: true }, csv: true
+  };
+
+  componentDidMount() { this.applyTheme(); }
+  componentDidUpdate(prev) { if (prev.palette !== this.props.palette) this.applyTheme(); }
+  applyTheme() {
+    const t = THEMES[this.props.palette] || THEMES['Signal red'];
+    const r = document.documentElement.style;
+    r.setProperty('--color-accent', t.a);
+    r.setProperty('--color-accent-600', t.a600);
+    r.setProperty('--color-accent-700', t.a700);
+    r.setProperty('--color-accent-100', t.a100);
+    r.setProperty('--color-accent-200', t.a200);
+  }
+
+  accounts() { if (!this._acc) this._acc = buildAccounts(); return this._acc; }
+
+  alertList() {
+    const flagged = this.accounts().filter(a => a.score < 76);
+    return flagged.map((a, i) => {
+      const sev = a.score < 65 ? 'Critical' : a.score < 70 ? 'High' : 'Watch';
+      const st = this.state.alertStatus[a.id] || (i > 3 ? 'Resolved' : 'Open');
+      const sig = a.charts.filter(c => c.worse).map(c => ({
+        name: c.key === 'cancel' ? 'Cancellations' : c.key === 'freq' ? 'Meeting frequency' : c.label,
+        value: a.labels[c.key]
+      }));
+      if (!sig.length) sig.push({ name: 'Composite drift', value: r1(a.composite * 2.4) + 'σ' });
+      return {
+        acc: a, severity: sev, status: st, signals: sig,
+        date: ['Sep 15','Sep 15','Sep 14','Sep 12','Sep 9','Sep 5','Sep 2'][i] || 'Sep 1'
+      };
+    });
+  }
+
+  set(k, v) { this.setState({ [k]: v }); }
+  openAccount = (id) => { this.setState({ view: 'detail', selId: id }); window.scrollTo(0, 0); };
+  sortBy(key) {
+    this.setState(s => ({ sort: key, dir: s.sort === key ? -s.dir : 1 }));
+  }
+
+  renderVals() {
+    const S = this.state, accs = this.accounts();
+    const view = S.view;
+    const navFor = (v) => ({
+      bg: view === v || (v === 'accounts' && view === 'detail') ? 'color-mix(in srgb, var(--color-text) 8%, transparent)' : 'transparent',
+      bar: view === v || (v === 'accounts' && view === 'detail') ? 'var(--color-accent)' : 'transparent',
+      fg: view === v || (v === 'accounts' && view === 'detail') ? 'var(--color-text)' : 'var(--color-neutral-700)'
+    });
+    const n1 = navFor('overview'), n2 = navFor('accounts'), n3 = navFor('alerts'), n4 = navFor('connections');
+
+    const atRisk = accs.filter(a => a.statusKey === 'risk');
+    const watch = accs.filter(a => a.statusKey === 'watch');
+    const healthy = accs.filter(a => a.statusKey === 'healthy');
+    const atRiskRev = atRisk.reduce((t, a) => t + a.mrr, 0);
+    const alerts = this.alertList();
+    const openAlerts = alerts.filter(a => a.status === 'Open');
+
+    const decorate = (a) => {
+      const p = PAL[a.statusKey];
+      const sp = a.scores.slice(5);
+      const [mn, mx] = [Math.min.apply(null, sp) - 2, Math.max.apply(null, sp) + 2];
+      return {
+        name: a.name, industry: a.industry, owner: a.owner, score: a.score, status: a.status,
+        driver: a.driver, mrrText: shortMoney(a.mrr) + '/mo',
+        fg: p.fg, mark: p.mark, bg: p.bg, rowBg: p.row,
+        barW: a.score + '%',
+        spark: line(sp, 60, 18, 3, mn, mx),
+        trendColor: a.scoreDelta < -6 ? PAL.risk.mark : a.scoreDelta < 0 ? PAL.watch.mark : PAL.healthy.mark,
+        trendText: (a.scoreDelta > 0 ? '+' : '') + a.scoreDelta,
+        contactText: a.days + 'd ago',
+        contactColor: a.days > 9 ? PAL.risk.fg : 'inherit',
+        renewText: a.renewal.shortText + ' · ' + a.renewal.days + 'd',
+        renewColor: a.statusKey !== 'healthy' && a.renewal.days <= 60 ? PAL.risk.fg
+          : a.renewal.days <= 45 ? PAL.watch.fg : 'var(--color-neutral-700)',
+        renewWeight: a.statusKey !== 'healthy' && a.renewal.days <= 60 ? '800' : '400',
+        open: () => this.openAccount(a.id)
+      };
+    };
+
+    let rows = accs.slice();
+    const q = S.query.trim().toLowerCase();
+    if (q) rows = rows.filter(a => (a.name + ' ' + a.owner + ' ' + a.industry).toLowerCase().includes(q));
+    if (S.statusFilter !== 'All') rows = rows.filter(a => a.status === S.statusFilter);
+    const cmp = { name: (a, b) => a.name.localeCompare(b.name), score: (a, b) => a.score - b.score, mrr: (a, b) => b.mrr - a.mrr, trend: (a, b) => a.scoreDelta - b.scoreDelta, contact: (a, b) => b.days - a.days, renewal: (a, b) => a.renewal.days - b.renewal.days, risk: (a, b) => a.score - b.score };
+    rows.sort((a, b) => (cmp[S.sort] || cmp.risk)(a, b) * S.dir);
+    const caretFor = k => S.sort === k ? (S.dir === 1 ? '↑' : '↓') : '';
+
+    const segStyle = (on) => on
+      ? { bg: 'var(--color-accent)', fg: 'var(--color-bg)' }
+      : { bg: 'transparent', fg: 'var(--color-text)' };
+    const statusOptions = ['All', 'At risk', 'Watch', 'Healthy'].map(l => {
+      const st = segStyle(S.statusFilter === l);
+      return { label: l, bg: st.bg, fg: st.fg, checked: S.statusFilter === l, pick: () => this.set('statusFilter', l) };
+    });
+    const alertFilters = ['All', 'At risk', 'Watch', 'Resolved'].map(l => {
+      const st = segStyle(S.alertFilter === l);
+      return { label: l, bg: st.bg, fg: st.fg, checked: S.alertFilter === l, pick: () => this.set('alertFilter', l) };
+    });
+
+    let shown = alerts;
+    if (S.alertFilter === 'Resolved') shown = alerts.filter(a => a.status === 'Resolved');
+    else if (S.alertFilter === 'At risk') shown = alerts.filter(a => a.acc.statusKey === 'risk');
+    else if (S.alertFilter === 'Watch') shown = alerts.filter(a => a.acc.statusKey === 'watch');
+
+    const alertRows = shown.map(al => {
+      const p = PAL[al.acc.statusKey];
+      return {
+        account: al.acc.name, owner: al.acc.owner, score: al.acc.score, date: al.date,
+        renewText: al.acc.renewal.shortText, renewDays: al.acc.renewal.days + ' days',
+        renewColor: al.acc.renewal.days <= 60 ? p.fg : 'var(--color-text)',
+        severity: al.severity, mrrText: shortMoney(al.acc.mrr),
+        fg: p.fg, mark: p.mark, chipBg: p.bg,
+        bg: al.status === 'Resolved' ? 'transparent' : p.row,
+        brief: al.acc.brief, action: al.acc.action, signals: al.signals,
+        radioName: 'st' + al.acc.id,
+        statuses: ['Open', 'Acknowledged', 'Resolved'].map(l => {
+          const on = al.status === l, st = segStyle(on);
+          return { label: l, bg: st.bg, fg: st.fg, checked: on, pick: () => this.setState(s => ({ alertStatus: Object.assign({}, s.alertStatus, { [al.acc.id]: l }) })) };
+        }),
+        open: () => this.openAccount(al.acc.id)
+      };
+    });
+
+    const med = accs.map(a => a.scores);
+    const portfolio = PERIODS.map((_, i) => {
+      const col = med.map(s => s[i]).sort((x, y) => x - y);
+      return col[Math.floor(col.length / 2)];
+    });
+    const [pmin, pmax] = extent(portfolio);
+    const pPath = line(portfolio, 700, 160, 12, pmin, pmax);
+
+    const sel = accs[S.selId] || accs[0];
+    const selP = PAL[sel.statusKey];
+    const SH = 220, SP = 16;
+    const selPath = line(sel.scores, 700, SH, SP, 35, 100);
+
+    const conns = [
+      { key: 'gmail', name: 'Gmail', on: S.conns.gmail, detailOn: 'Connected as dana@studioco.agency · 12 client domains matched · metadata only', detailOff: 'Read message timestamps only, never content.' },
+      { key: 'cal', name: 'Google Calendar', on: S.conns.cal, detailOn: 'Connected · 3 shared calendars · attendance and cancellations tracked', detailOff: 'Track meeting frequency, attendance and cancellations.' }
+    ].map(c => ({
+      name: c.name,
+      state: c.on ? 'Connected' : 'Not connected',
+      fg: c.on ? PAL.healthy.fg : 'var(--color-neutral-800)',
+      bg: c.on ? PAL.healthy.bg : 'var(--color-neutral-200)',
+      detail: c.on ? c.detailOn : c.detailOff,
+      cta: c.on ? 'Disconnect' : 'Connect',
+      btnClass: c.on ? 'btn-secondary' : 'btn-primary',
+      toggle: () => this.setState(s => ({ conns: Object.assign({}, s.conns, { [c.key]: !s.conns[c.key] }) }))
+    }));
+
+    return {
+      isOverview: view === 'overview', isAccounts: view === 'accounts', isDetail: view === 'detail',
+      isAlerts: view === 'alerts', isConnections: view === 'connections',
+      goOverview: () => this.set('view', 'overview'),
+      goAccounts: () => this.set('view', 'accounts'),
+      goAlerts: () => this.set('view', 'alerts'),
+      goConnections: () => this.set('view', 'connections'),
+      goBack: () => this.set('view', 'accounts'),
+      nav: {
+        overviewBg: n1.bg, overviewBar: n1.bar, overviewFg: n1.fg,
+        accountsBg: n2.bg, accountsBar: n2.bar, accountsFg: n2.fg,
+        alertsBg: n3.bg, alertsBar: n3.bar, alertsFg: n3.fg,
+        connectionsBg: n4.bg, connectionsBar: n4.bar, connectionsFg: n4.fg
+      },
+      openAlertCount: openAlerts.length,
+      syncedAt: '9:04 AM',
+      weekLabel: 'Sep 15',
+      atRiskRevenue: money(atRiskRev),
+      annualExposure: '$' + Math.round(atRiskRev * 12 / 1000) + 'K',
+      healthyRevenue: '$' + Math.round(healthy.reduce((t, a) => t + a.mrr, 0) / 1000) + 'K',
+      atRiskCount: atRisk.length, watchCount: watch.length, healthyCount: healthy.length,
+      renewalWindowCount: accs.filter(a => a.statusKey !== 'healthy' && a.renewal.days <= 90).length,
+      renewalWindowNext: (() => {
+        const n = accs.filter(a => a.statusKey !== 'healthy').sort((a, b) => a.renewal.days - b.renewal.days)[0];
+        return n ? n.name + ' renews in ' + n.renewal.days + ' days' : 'None in window';
+      })(),
+      renewalWindowRevenue: '$' + Math.round(accs.filter(a => a.statusKey !== 'healthy' && a.renewal.days <= 90).reduce((t, a) => t + a.mrr, 0) / 1000) + 'K/mo up for renewal',
+      portfolioScore: Math.round(accs.reduce((t, a) => t + a.score, 0) / accs.length),
+      portfolioDelta: '−4 vs. 4 wks',
+      attention: accs.slice().sort((a, b) => (a.score - b.score)).slice(0, 5).map(decorate),
+      rows: rows.map(decorate),
+      noRows: rows.length === 0,
+      rowCountText: rows.length + ' of ' + accs.length + ' accounts',
+      query: S.query,
+      onQuery: (e) => this.set('query', e.target.value),
+      statusOptions,
+      sortByName: () => this.sortBy('name'), sortByScore: () => this.sortBy('score'),
+      sortByMrr: () => this.sortBy('mrr'), sortByTrend: () => this.sortBy('trend'),
+      sortByContact: () => this.sortBy('contact'),
+      sortByRenewal: () => this.sortBy('renewal'),
+      caret: { name: caretFor('name'), score: caretFor('score'), mrr: caretFor('mrr'), trend: caretFor('trend'), contact: caretFor('contact'), renewal: caretFor('renewal') },
+      portfolioPath: pPath,
+      portfolioArea: pPath + ' L700 160 L0 160 Z',
+      firstPeriod: PERIODS[0], lastPeriod: PERIODS[11],
+      recentAlerts: alerts.slice(0, 5).map(al => ({
+        account: al.acc.name, short: al.signals.map(s => s.name + ' ' + s.value).join(' · '),
+        date: al.date, mark: PAL[al.acc.statusKey].mark, open: () => this.openAccount(al.acc.id)
+      })),
+      alerts: alertRows, noAlerts: alertRows.length === 0,
+      alertCountText: alertRows.length + ' alerts · ' + openAlerts.length + ' open',
+      alertFilters,
+      threshold: 70, showMath: this.props.showMath !== false,
+      sel: {
+        name: sel.name, industry: sel.industry, owner: sel.owner, since: sel.since,
+        contactEmail: sel.contactEmail, score: sel.score, status: sel.status,
+        fg: selP.fg, mark: selP.mark,
+        mrrText: money(sel.mrr), annualText: '$' + Math.round(sel.mrr * 12 / 1000) + 'K',
+        contactText: sel.days + ' days ago',
+        renewalText: sel.renewal.text,
+        renewalDays: sel.renewal.days + ' days away',
+        renewalColor: sel.statusKey !== 'healthy' && sel.renewal.days <= 60 ? selP.fg : 'var(--color-text)',
+        renewalNote: sel.statusKey !== 'healthy' && sel.renewal.days <= 60
+          ? 'Renewal decision window is open — act before the conversation starts.'
+          : 'Outside the renewal window.',
+        verdict: sel.verdict, brief: sel.brief, action: sel.action, actionWhy: sel.actionWhy,
+        trendSentence: (sel.scoreDelta < 0 ? sel.scoreDelta : '+' + sel.scoreDelta) + ' points over 3 weeks',
+        thresholdY: yOf(70, 35, 100, SH, SP).toFixed(1),
+        scorePath: selPath,
+        scoreRecent: line(sel.scores, 700, SH, SP, 35, 100, 8),
+        scoreArea: selPath + ' L700 220 L0 220 Z',
+        lastY: yOf(sel.scores[11], 35, 100, SH, SP).toFixed(1),
+        charts: sel.charts, mathRows: sel.mathRows,
+        compositeText: sel.composite.toFixed(3),
+        activity: (ACTIVITY[sel.name] || DEFAULT_ACTIVITY).map(e => ({ date: e[0], text: e[1], color: PAL[e[2]].mark }))
+      },
+      connections: conns,
+      csvState: S.csv ? 'invoices_studioco_2026.csv · 1,284 rows · last upload Sep 14' : 'No invoice history uploaded yet.',
+      csvCta: S.csv ? 'Replace file' : 'Upload CSV',
+      uploadCsv: () => this.setState(s => ({ csv: !s.csv }))
+    };
+  }
+}
+
+</script>
+</body>
+</html>
