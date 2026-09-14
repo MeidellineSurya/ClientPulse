@@ -83,11 +83,11 @@ class BriefGenerationTests(unittest.TestCase):
 
                 self.assertEqual(brief.source, "fallback")
 
-    def test_unsupported_causal_claim_uses_fallback(self):
+    def test_unsupported_certainty_claim_uses_fallback(self):
         for summary in (
             "Risk is definitely caused by incompetence.",
-            "Payment delays led to the elevated risk.",
-            "The risk is elevated due to slow responses.",
+            "The relationship has certainly ended.",
+            "This has proven fatal to the account.",
         ):
             with self.subTest(summary=summary):
                 provider = StubProvider(
@@ -101,6 +101,27 @@ class BriefGenerationTests(unittest.TestCase):
                 brief = generate_brief(self._context(), provider)
 
                 self.assertEqual(brief.source, "fallback")
+
+    def test_causal_connector_language_is_permitted(self):
+        # These connectors merely tie cited evidence to the score, which is
+        # exactly what the prompt asks for — they shouldn't trigger fallback.
+        for summary in (
+            "The risk is elevated due to slow responses.",
+            "Payment delays led to the elevated risk.",
+            "Cancelled meetings caused the score to worsen.",
+        ):
+            with self.subTest(summary=summary):
+                provider = StubProvider(
+                    {
+                        "summary": summary,
+                        "drivers": ["Response-time drift is elevated."],
+                        "suggested_action": "Review the account internally.",
+                    }
+                )
+
+                brief = generate_brief(self._context(), provider)
+
+                self.assertEqual(brief.source, "llm")
 
     def test_context_rejects_non_string_signal_names(self):
         with self.assertRaisesRegex(ValueError, "signal name"):

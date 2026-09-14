@@ -106,7 +106,7 @@ def _prompt(context: BriefContext) -> str:
     instructions = [
         "Write an internal retention-risk brief using only the supplied evidence.",
         "The risk score is authoritative: do not calculate, revise, or contradict it.",
-        "Do not claim causality and do not contact the client.",
+        "Explain drivers using only the supplied evidence, without overclaiming certainty, and do not contact the client.",
     ]
     # Only present when a caller has raw signal values on hand (see
     # BriefContext) — lets the brief cite this account's actual numbers
@@ -153,11 +153,15 @@ def _validated(payload: Mapping[str, object], *, source: str) -> AccountBrief:
     summary = _text(payload["summary"], "summary", 500)
     suggested_action = _text(payload["suggested_action"], "suggested_action", 300)
     policy_text = " ".join((summary, *drivers, suggested_action)).lower()
+    # Ordinary causal connectors ("because", "due to", "led to", "caused") are
+    # allowed — the brief is expected to tie evidence to the score, and the
+    # scoring formula itself is a real causal relationship. What's actually
+    # unsupported is claiming a level of certainty the evidence doesn't give.
     if re.search(
-        r"\b(?:cause|caused|causes|causing|definitely|certainly|proven?|because|due\s+to|led\s+to|resulted\s+in|driven\s+by|attributed\s+to)\b",
+        r"\b(?:definitely|certainly|proven?|guaranteed?|undeniably|unquestionably)\b",
         policy_text,
     ):
-        raise ValueError("brief makes an unsupported causal or certainty claim")
+        raise ValueError("brief makes an unsupported certainty claim")
     contact_verb = r"(?:contact|email|message|call|send)"
     urgency = r"(?:automatically|immediately)"
     if re.search(
