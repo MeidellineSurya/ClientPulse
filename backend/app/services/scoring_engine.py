@@ -80,6 +80,10 @@ class AccountScoringResult:
     # exposed so callers (the Groq brief step) can cite the actual trend,
     # not just its slope.
     period_scores: list[float] = field(default_factory=list)
+    # The most recent period's raw signal values (not normalized drift) —
+    # exposed so a brief can say "14.2 hours, usually 3.1" instead of just
+    # "drift is 87%". Keyed the same as drifts/baselines.
+    current_values: dict[str, float] = field(default_factory=dict)
 
 
 def compute_drift(
@@ -217,11 +221,13 @@ def score_account_history(history: list[dict]) -> AccountScoringResult:
 
     period_scores: list[float] = []
     latest_drifts: dict[str, float] = {}
+    latest_current_signals: dict[str, float] = {}
     for row in trend_window:
         current_signals = {signal: float(row[signal]) for signal in TRACKED_SIGNALS if row.get(signal) is not None}
         score, drifts = compute_composite_risk(current_signals, baselines)
         period_scores.append(score)
         latest_drifts = drifts
+        latest_current_signals = current_signals
 
     composite_score = period_scores[-1] if period_scores else 0.0
     trend_slope = round(compute_trend_slope(period_scores), 4)
@@ -237,4 +243,5 @@ def score_account_history(history: list[dict]) -> AccountScoringResult:
         signals_fired=significant_signals(latest_drifts) if alert_fired else [],
         signal_contributions=compute_signal_contributions(latest_drifts),
         period_scores=period_scores,
+        current_values=latest_current_signals,
     )
