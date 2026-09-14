@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from math import isfinite
 from typing import Protocol
 
@@ -22,6 +22,19 @@ class BriefContext:
     severity: str
     triggered_signals: Mapping[str, float]
     recent_scores: tuple[float, ...]
+    # Optional richer evidence, keyed the same as triggered_signals. When
+    # present, the prompt cites the account's actual numbers ("14.2 hours,
+    # usually 3.1") instead of only the abstract 0-1 drift ratio. Left empty
+    # by callers that don't have raw values on hand (e.g. retention_radar's
+    # own evaluate_alert path) — the brief degrades gracefully to the old
+    # drift-only phrasing rather than failing.
+    signal_current_values: Mapping[str, float] = field(default_factory=dict)
+    signal_baseline_averages: Mapping[str, float] = field(default_factory=dict)
+    # One label per recent_scores entry (same order, same length when set) —
+    # e.g. ("healthy", "watch", "at-risk") — so the prompt can describe the
+    # trend's actual shape instead of three bare numbers. None when the
+    # caller doesn't have tier labels to offer.
+    recent_score_labels: tuple[str, ...] | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.account_name, str) or not self.account_name.strip():
@@ -60,6 +73,17 @@ class BriefContext:
             for score in self.recent_scores
         ):
             raise ValueError("recent_scores must contain three values between 0 and 1")
+        for label, values in (
+            ("signal_current_values", self.signal_current_values),
+            ("signal_baseline_averages", self.signal_baseline_averages),
+        ):
+            for name, value in values.items():
+                if not isinstance(name, str) or not name.strip():
+                    raise ValueError(f"each {label} name must be a non-empty string")
+                if isinstance(value, bool) or not isinstance(value, (int, float)) or not isfinite(value):
+                    raise ValueError(f"each {label} value must be a finite number")
+        if self.recent_score_labels is not None and len(self.recent_score_labels) != len(self.recent_scores):
+            raise ValueError("recent_score_labels must have one label per recent_scores entry")
 
 
 @dataclass(frozen=True)
@@ -79,13 +103,35 @@ def _prompt(context: BriefContext) -> str:
         "triggered_signals": dict(context.triggered_signals),
         "recent_scores": list(context.recent_scores),
     }
-    return (
-        "Write an internal retention-risk brief using only the supplied evidence. "
-        "The risk score is authoritative: do not calculate, revise, or contradict it. "
-        "Do not claim causality and do not contact the client. Return JSON with exactly "
-        "summary (string), drivers (1-4 strings), and suggested_action (string).\n"
-        f"EVIDENCE={json.dumps(evidence, sort_keys=True)}"
+    instructions = [
+        "Write an internal retention-risk brief using only the supplied evidence.",
+        "The risk score is authoritative: do not calculate, revise, or contradict it.",
+        "Do not claim causality and do not contact the client.",
+    ]
+    # Only present when a caller has raw signal values on hand (see
+    # BriefContext) — lets the brief cite this account's actual numbers
+    # ("14.2 hours, usually 3.1") instead of only an abstract 0-1 ratio.
+    if context.signal_current_values:
+        evidence["signal_current_values"] = dict(context.signal_current_values)
+        evidence["signal_baseline_averages"] = dict(context.signal_baseline_averages)
+        instructions.append(
+            "For each triggered signal, signal_current_values and "
+            "signal_baseline_averages give this specific account's actual current "
+            "and usual numbers — cite them directly (e.g. \"14.2 hours, usually "
+            "around 3\") rather than describing drift as an abstract percentage."
+        )
+    if context.recent_score_labels is not None:
+        evidence["recent_score_labels"] = list(context.recent_score_labels)
+        instructions.append(
+            "recent_score_labels gives a plain-language tier (e.g. healthy/watch/"
+            "at-risk) for each entry in recent_scores, oldest first — describe the "
+            "trend using these tiers, not just the bare numbers."
+        )
+    instructions.append(
+        "Return JSON with exactly summary (string), drivers (1-4 strings), and "
+        "suggested_action (string)."
     )
+    return " ".join(instructions) + f"\nEVIDENCE={json.dumps(evidence, sort_keys=True)}"
 
 
 def _text(value: object, field: str, maximum: int) -> str:
@@ -131,9 +177,17 @@ def _fallback(context: BriefContext) -> AccountBrief:
     ordered = sorted(
         context.triggered_signals.items(), key=lambda item: (-item[1], item[0])
     )
+
+    def _describe(name: str, drift: float) -> str:
+        label = name.replace("_", " ").capitalize()
+        current = context.signal_current_values.get(name)
+        baseline = context.signal_baseline_averages.get(name)
+        if current is not None and baseline is not None:
+            return f"{label} is now {current:.1f}, usually {baseline:.1f}."
+        return f"{label} drift is {drift:.0%}."
+
     drivers = tuple(
-        f"{name.replace('_', ' ').capitalize()} drift is {drift:.0%}."
-        for name, drift in ordered[:4]
+        _describe(name, drift) for name, drift in ordered[:4]
     ) or ("The composite risk crossed the configured alert threshold.",)
     return AccountBrief(
         summary=f"{context.account_name} is at {context.composite_risk:.0%} {context.severity} retention risk after a worsening three-period trend.",

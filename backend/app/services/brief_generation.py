@@ -18,6 +18,16 @@ from retention_radar.briefs import BriefContext, generate_brief
 # low-severity alert. Caught below: it still gets *a* brief, just always
 # the deterministic fallback, never an LLM-generated one.
 
+# Mirrors frontend/src/lib/format.ts's healthTier bucketing exactly, so a
+# brief's "watch"/"at-risk" language always agrees with what the Portfolio
+# and Account Detail pages show for the same score.
+def _score_tier_label(score_0_to_100: float) -> str:
+    if score_0_to_100 >= 60:
+        return "at-risk"
+    if score_0_to_100 >= 30:
+        return "watch"
+    return "healthy"
+
 
 def build_alert_brief(
     account_name: str, contract_value_monthly: float, result: AccountScoringResult
@@ -30,7 +40,8 @@ def build_alert_brief(
     try:
         if result.severity is None:
             raise ValueError("a fired alert must have a severity")
-        recent_scores = tuple(score / 100 for score in result.period_scores[-3:])
+        recent_period_scores = result.period_scores[-3:]
+        recent_scores = tuple(score / 100 for score in recent_period_scores)
         context = BriefContext(
             account_name=account_name,
             monthly_value=contract_value_monthly,
@@ -38,6 +49,17 @@ def build_alert_brief(
             severity=result.severity,
             triggered_signals={signal: result.drifts[signal] for signal in result.signals_fired},
             recent_scores=recent_scores,
+            signal_current_values={
+                signal: result.current_values[signal]
+                for signal in result.signals_fired
+                if signal in result.current_values
+            },
+            signal_baseline_averages={
+                signal: result.baselines[signal][0]
+                for signal in result.signals_fired
+                if signal in result.baselines
+            },
+            recent_score_labels=tuple(_score_tier_label(score) for score in recent_period_scores),
         )
         brief = generate_brief(context, get_brief_provider())
     except Exception:  # noqa: BLE001 - every provider failure must use the safe fallback

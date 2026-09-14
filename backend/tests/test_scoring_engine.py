@@ -226,6 +226,17 @@ def test_score_account_history_worsening_account_fires_alert():
     assert result.signal_contributions["avg_response_time_hours"] == max(result.signal_contributions.values())
 
 
+def test_score_account_history_exposes_the_final_periods_raw_values():
+    # current_values should be the actual raw numbers from the most recent
+    # period — not drift, not a percentage — for callers (the AI brief
+    # step) that want to cite this account's real numbers.
+    history = _worsening_history()
+    result = score_account_history(history)
+    last_row = history[-1]
+    assert result.current_values["avg_response_time_hours"] == last_row["avg_response_time_hours"]
+    assert result.current_values["meetings_cancelled"] == last_row["meetings_cancelled"]
+
+
 def test_score_account_history_contact_turnover_alone_is_not_enough_to_fire():
     # A stakeholder change with every other signal stable contributes at
     # most its own weight (0.20 -> 20 points) — below RISK_ALERT_THRESHOLD,

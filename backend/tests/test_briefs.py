@@ -124,6 +124,89 @@ class BriefGenerationTests(unittest.TestCase):
                 recent_scores=(0.7, 0.9, 1.2),
             )
 
+    def test_context_defaults_to_no_raw_values_or_score_labels(self):
+        # Existing callers (e.g. retention_radar.service) don't know about
+        # raw values or score-tier labels — must keep working unchanged.
+        context = self._context()
+        self.assertEqual(context.signal_current_values, {})
+        self.assertEqual(context.signal_baseline_averages, {})
+        self.assertIsNone(context.recent_score_labels)
+
+    def test_context_rejects_mismatched_score_label_count(self):
+        with self.assertRaisesRegex(ValueError, "recent_score_labels"):
+            BriefContext(
+                account_name="StudioCo",
+                monthly_value=10_000,
+                composite_risk=0.82,
+                severity="high",
+                triggered_signals={"response_time": 0.88},
+                recent_scores=(0.54, 0.67, 0.82),
+                recent_score_labels=("watch", "at-risk"),  # only 2, needs 3
+            )
+
+    def test_context_rejects_non_finite_raw_value(self):
+        with self.assertRaisesRegex(ValueError, "signal_current_values"):
+            BriefContext(
+                account_name="StudioCo",
+                monthly_value=10_000,
+                composite_risk=0.82,
+                severity="high",
+                triggered_signals={"response_time": 0.88},
+                recent_scores=(0.54, 0.67, 0.82),
+                signal_current_values={"response_time": float("inf")},
+            )
+
+    def test_prompt_cites_raw_values_and_score_labels_when_present(self):
+        context = BriefContext(
+            account_name="StudioCo",
+            monthly_value=10_000,
+            composite_risk=0.82,
+            severity="high",
+            triggered_signals={"avg_response_time_hours": 0.88},
+            recent_scores=(0.2, 0.55, 0.82),
+            signal_current_values={"avg_response_time_hours": 14.2},
+            signal_baseline_averages={"avg_response_time_hours": 3.1},
+            recent_score_labels=("healthy", "watch", "at-risk"),
+        )
+        provider = StubProvider(
+            {
+                "summary": "StudioCo's response times have climbed sharply.",
+                "drivers": ["Response time is now 14.2 hours, usually 3.1."],
+                "suggested_action": "Schedule an internal review.",
+            }
+        )
+
+        generate_brief(context, provider)
+
+        prompt = provider.prompts[0]
+        self.assertIn("14.2", prompt)
+        self.assertIn("3.1", prompt)
+        self.assertIn("healthy", prompt)
+        self.assertIn("at-risk", prompt)
+
+    def test_fallback_cites_raw_values_when_present(self):
+        context = BriefContext(
+            account_name="StudioCo",
+            monthly_value=10_000,
+            composite_risk=0.82,
+            severity="high",
+            triggered_signals={"avg_response_time_hours": 0.88},
+            recent_scores=(0.2, 0.55, 0.82),
+            signal_current_values={"avg_response_time_hours": 14.2},
+            signal_baseline_averages={"avg_response_time_hours": 3.1},
+        )
+
+        class FailingProvider:
+            def generate(self, prompt):
+                raise TimeoutError("provider unavailable")
+
+        brief = generate_brief(context, FailingProvider())
+
+        self.assertEqual(brief.source, "fallback")
+        self.assertIn("14.2", brief.drivers[0])
+        self.assertIn("3.1", brief.drivers[0])
+        self.assertNotIn("drift is", brief.drivers[0])
+
 
 if __name__ == "__main__":
     unittest.main()
