@@ -120,8 +120,22 @@ def test_insert_health_score_appends_a_row():
     client = FakeSupabaseClient({"health_score": []})
     insert_health_score(client, "a1", 72.5, 3.2)
     assert client._tables["health_score"] == [
-        {"account_id": "a1", "composite_score": 72.5, "trend_slope": 3.2}
+        {
+            "account_id": "a1",
+            "composite_score": 72.5,
+            "trend_slope": 3.2,
+            "anomaly_score": None,
+            "is_anomaly": None,
+        }
     ]
+
+
+def test_insert_health_score_persists_anomaly_fields_when_given():
+    client = FakeSupabaseClient({"health_score": []})
+    insert_health_score(client, "a1", 72.5, 3.2, anomaly_score=-0.12, is_anomaly=True)
+    row = client._tables["health_score"][0]
+    assert row["anomaly_score"] == -0.12
+    assert row["is_anomaly"] is True
 
 
 def test_insert_alert_defaults_to_open_status_with_a_triggered_at_timestamp():

@@ -102,13 +102,21 @@ def upsert_baselines(
 
 
 def insert_health_score(
-    client: Client, account_id: str, composite_score: float, trend_slope: float
+    client: Client,
+    account_id: str,
+    composite_score: float,
+    trend_slope: float,
+    *,
+    anomaly_score: float | None = None,
+    is_anomaly: bool | None = None,
 ) -> None:
     client.table("health_score").insert(
         {
             "account_id": account_id,
             "composite_score": composite_score,
             "trend_slope": trend_slope,
+            "anomaly_score": anomaly_score,
+            "is_anomaly": is_anomaly,
         }
     ).execute()
 

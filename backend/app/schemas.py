@@ -81,6 +81,15 @@ class AccountScoreResult(BaseModel):
     # Annualized contract value weighted by composite_score — the dollar
     # figure behind the pitch's money case, not just the abstract score.
     revenue_at_risk: float
+    # A separate, complementary ML signal (see app/services/anomaly_detection.py)
+    # — an Isolation Forest fit across the whole portfolio's history, flagging
+    # period/signal combinations unusual for the book of business as a whole,
+    # regardless of what's "normal" for this one account. Never influences
+    # composite_score or alert_fired; None when the batch endpoint couldn't
+    # fit a model yet (too little portfolio history) or wasn't run (the
+    # single-account recompute endpoint doesn't have portfolio context).
+    anomaly_score: float | None = None
+    is_anomaly: bool | None = None
 
 
 class RecomputeScoringResponse(BaseModel):
@@ -94,6 +103,10 @@ class RecomputeScoringResponse(BaseModel):
     accounts_scored: int
     alerts_fired: int
     total_revenue_at_risk: float
+    # How many accounts the portfolio-wide anomaly model flagged this run —
+    # 0 whenever a model couldn't be fit yet, same as every result's
+    # is_anomaly being None in that case.
+    anomalies_detected: int = 0
     results: list[AccountScoreResult]
     # Accounts skipped because scoring raised (e.g. malformed
     # signal_snapshot data) rather than because they had no history yet —
@@ -129,6 +142,10 @@ class HealthScorePoint(BaseModel):
     composite_score: float
     trend_slope: float
     computed_at: datetime
+    # See AccountScoreResult.anomaly_score/is_anomaly — persisted alongside
+    # the deterministic score so the chart can show both over time.
+    anomaly_score: float | None = None
+    is_anomaly: bool | None = None
 
 
 class AccountSummary(BaseModel):
