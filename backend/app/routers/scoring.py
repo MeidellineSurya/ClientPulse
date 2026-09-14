@@ -15,6 +15,7 @@ from supabase import Client
 from app.auth import AuthContext, require_auth_context
 from app.schemas import AccountScoreResult, RecomputeScoringResponse
 from app.services.accounts_repo import fetch_account
+from app.services.anomaly_detection import AnomalyModel, fit_anomaly_model, score_anomaly
 from app.services.brief_generation import build_alert_brief
 from app.services.scoring_engine import (
     SEVERITY_ORDER,
@@ -41,11 +42,27 @@ def _score_and_persist(
     history: list[dict],
     contract_value_monthly: float,
     account_name: str,
+    anomaly_model: AnomalyModel | None = None,
 ) -> AccountScoreResult:
     result = score_account_history(history)
 
+    # A separate, complementary ML lens (see anomaly_detection.py) — scored
+    # against the most recent raw period, never against drift/baselines, and
+    # never allowed to influence result.alert_fired or composite_score.
+    # None/None when no model was fit (single-account recompute has no
+    # portfolio context to fit one, or the batch endpoint's book is still
+    # too small — see anomaly_detection.MIN_TRAINING_ROWS).
+    anomaly_score, is_anomaly = score_anomaly(anomaly_model, history[-1])
+
     upsert_baselines(client, account_id, result.baselines)
-    insert_health_score(client, account_id, result.composite_score, result.trend_slope)
+    insert_health_score(
+        client,
+        account_id,
+        result.composite_score,
+        result.trend_slope,
+        anomaly_score=anomaly_score,
+        is_anomaly=is_anomaly,
+    )
     if result.alert_fired:
         assert result.severity is not None
         existing_alert = fetch_open_alert(client, account_id)
@@ -80,6 +97,8 @@ def _score_and_persist(
         revenue_at_risk=compute_revenue_at_risk(
             contract_value_monthly, result.composite_score
         ),
+        anomaly_score=anomaly_score,
+        is_anomaly=is_anomaly,
     )
 
 
@@ -113,21 +132,38 @@ def recompute_all_scores(
     auth: AuthContext = Depends(require_auth_context),  # noqa: B008 - FastAPI dependency
 ) -> RecomputeScoringResponse:
     client = auth.client
+    accounts = fetch_accounts_with_contract_value(client, auth.agency_id)
+
+    # Fetch every account's history up front, in one pass, so the anomaly
+    # model can be fit once across the whole book before anyone is scored
+    # — an Isolation Forest needs to see the full portfolio to say what's
+    # unusual for it, which no per-account call can offer on its own.
+    histories: dict[str, list[dict]] = {}
+    all_rows: list[dict] = []
+    for account_id in accounts:
+        history = fetch_signal_history(client, account_id)
+        if history:
+            histories[account_id] = history
+            all_rows.extend(history)
+    anomaly_model = fit_anomaly_model(all_rows)
+
     results = []
     failed_account_ids = []
-    for account_id, (
-        contract_value_monthly,
-        account_name,
-    ) in fetch_accounts_with_contract_value(client, auth.agency_id).items():
+    for account_id, (contract_value_monthly, account_name) in accounts.items():
+        history = histories.get(account_id)
+        if not history:
+            # New account with no signal_snapshot rows yet — skip
+            # rather than fail the whole batch over one account.
+            continue
         try:
-            history = fetch_signal_history(client, account_id)
-            if not history:
-                # New account with no signal_snapshot rows yet — skip
-                # rather than fail the whole batch over one account.
-                continue
             results.append(
                 _score_and_persist(
-                    client, account_id, history, contract_value_monthly, account_name
+                    client,
+                    account_id,
+                    history,
+                    contract_value_monthly,
+                    account_name,
+                    anomaly_model=anomaly_model,
                 )
             )
         except Exception:  # noqa: BLE001 - isolate each account in a batch
@@ -145,6 +181,7 @@ def recompute_all_scores(
         total_revenue_at_risk=round(
             sum(r.revenue_at_risk for r in results if r.alert_fired), 2
         ),
+        anomalies_detected=sum(1 for r in results if r.is_anomaly),
         results=results,
         failed_account_ids=failed_account_ids,
     )
