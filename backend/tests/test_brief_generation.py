@@ -26,8 +26,10 @@ class _FakeProvider:
     def __init__(self, response=None, error=None):
         self._response = response
         self._error = error
+        self.prompts: list[str] = []
 
     def generate(self, prompt: str) -> dict:
+        self.prompts.append(prompt)
         if self._error is not None:
             raise self._error
         return self._response
@@ -74,6 +76,30 @@ def test_build_alert_brief_falls_back_when_llm_response_fails_validation(monkeyp
 
     assert "Acme" in ai_brief
     assert suggested_action
+
+
+def test_build_alert_brief_passes_raw_values_and_score_tier_labels_to_the_prompt(monkeypatch):
+    fake = _FakeProvider(
+        response={
+            "summary": "Acme is showing sustained response-time and cancellation drift.",
+            "drivers": ["Response time is climbing."],
+            "suggested_action": "Schedule a check-in call this week.",
+        }
+    )
+    monkeypatch.setattr("app.services.brief_generation.get_brief_provider", lambda: fake)
+
+    result = _result(
+        baselines={"avg_response_time_hours": (3.1, 0.5), "meetings_cancelled": (0.4, 0.2)},
+        current_values={"avg_response_time_hours": 14.2, "meetings_cancelled": 3.0},
+        period_scores=[20.0, 55.0, 92.0],  # healthy -> watch -> at-risk
+    )
+    build_alert_brief("Acme", 10000, result)
+
+    assert len(fake.prompts) == 1
+    prompt = fake.prompts[0]
+    assert '"avg_response_time_hours": 14.2' in prompt
+    assert '"avg_response_time_hours": 3.1' in prompt
+    assert '"healthy"' in prompt and '"watch"' in prompt and '"at-risk"' in prompt
 
 
 def test_build_alert_brief_falls_back_for_low_severity_not_accepted_by_brief_context(monkeypatch):
