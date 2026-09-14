@@ -93,7 +93,12 @@ create table if not exists health_score (
   account_id       uuid not null references account(id) on delete cascade,
   computed_at      timestamptz not null default now(),
   composite_score  numeric(5, 2) not null,
-  trend_slope      numeric(8, 4) not null default 0
+  trend_slope      numeric(8, 4) not null default 0,
+  -- Portfolio-wide Isolation Forest output (app/services/anomaly_detection.py)
+  -- — a separate, complementary ML signal, never an input to composite_score.
+  -- Both null when no model could be fit yet.
+  anomaly_score    numeric(10, 4),
+  is_anomaly       boolean
 );
 
 create index if not exists idx_health_score_account_id on health_score(account_id);

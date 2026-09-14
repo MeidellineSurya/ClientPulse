@@ -53,7 +53,7 @@ def fetch_latest_health_score(client: Client, account_id: str) -> dict | None:
     has never been scored yet."""
     resp = with_retry(
         lambda: client.table("health_score")
-        .select("composite_score, trend_slope, computed_at")
+        .select("composite_score, trend_slope, computed_at, anomaly_score, is_anomaly")
         .eq("account_id", account_id)
         .execute()
     )
@@ -69,7 +69,7 @@ def fetch_health_score_history(client: Client, account_id: str) -> list[dict]:
     row."""
     resp = with_retry(
         lambda: client.table("health_score")
-        .select("composite_score, trend_slope, computed_at")
+        .select("composite_score, trend_slope, computed_at, anomaly_score, is_anomaly")
         .eq("account_id", account_id)
         .execute()
     )

@@ -226,6 +226,64 @@ def test_recompute_all_scores_isolates_a_failing_account_instead_of_aborting_the
     assert body["accounts_scored"] == 1
 
 
+def test_recompute_all_scores_fits_and_applies_a_portfolio_wide_anomaly_model():
+    # 3 accounts x 8 periods = 24 rows, above MIN_TRAINING_ROWS (20) — enough
+    # for anomaly_detection to actually fit a model, unlike every other test
+    # in this file (which stay below that on purpose, to prove the *absence*
+    # of a model degrades to None rather than erroring).
+    fake_client = FakeSupabaseClient(
+        {
+            "account": [
+                {"id": "acc-1", "name": "Acme", "contract_value_monthly": 10000},
+                {"id": "acc-2", "name": "Beta", "contract_value_monthly": 8000},
+                {"id": "acc-3", "name": "Gamma", "contract_value_monthly": 6000},
+            ],
+            "signal_snapshot": (
+                _stable_snapshots("acc-1")
+                + _stable_snapshots("acc-2")
+                + _worsening_snapshots("acc-3")
+            ),
+        }
+    )
+    client = _override_client(fake_client)
+    try:
+        response = client.post("/score/recompute")
+    finally:
+        app.dependency_overrides.pop(require_auth_context, None)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["accounts_scored"] == 3
+    # Every result should have gotten a real anomaly verdict, not None —
+    # confirms the batch endpoint actually fit a model from the combined
+    # history and scored each account against it.
+    for result in body["results"]:
+        assert result["anomaly_score"] is not None
+        assert result["is_anomaly"] is not None
+    assert body["anomalies_detected"] == sum(1 for r in body["results"] if r["is_anomaly"])
+    # The persisted health_score rows carry the same fields.
+    for row in fake_client._tables["health_score"]:
+        assert row["anomaly_score"] is not None
+        assert row["is_anomaly"] is not None
+
+
+def test_recompute_account_score_has_no_anomaly_verdict_without_portfolio_context():
+    # The single-account endpoint has no portfolio to fit a model against —
+    # anomaly_score/is_anomaly stay None rather than silently defaulting to
+    # some misleading value.
+    fake_client = FakeSupabaseClient({"signal_snapshot": _stable_snapshots("acc-1")})
+    client = _override_client(fake_client)
+    try:
+        response = client.post("/score/recompute/acc-1")
+    finally:
+        app.dependency_overrides.pop(require_auth_context, None)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["anomaly_score"] is None
+    assert body["is_anomaly"] is None
+
+
 def test_recompute_without_supabase_configured_returns_503(monkeypatch):
     from app.config import settings
     from app.db import get_supabase_client
